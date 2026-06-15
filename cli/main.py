@@ -35,6 +35,18 @@ app = typer.Typer(
 )
 console = Console()
 
+def _valuation_label(pct: float | None) -> str:
+    """PE/PB 分位 → 解释标签。≤30%=便宜, 30-70%=合理, >70%=偏贵"""
+    if pct is None:
+        return "N/A"
+    if pct <= 30:
+        return "偏低(便宜)"
+    elif pct <= 70:
+        return "合理(中性)"
+    else:
+        return "偏高(贵)"
+
+
 DISCLAIMER = (
     "[dim]分析结果仅供参考，不构成任何投资建议。"
     "投资有风险，入市需谨慎。[/dim]"
@@ -456,8 +468,8 @@ def predict(
     summary.add_column("技术", style="blue")
     summary.add_column("趋势", style="magenta")
     summary.add_column("近期", style="green")
-    pe_str = f"PE分位 {result.pe_percentile:.0f}%" if result.pe_percentile else "PE N/A"
-    pb_str = f"PB分位 {result.pb_percentile:.0f}%" if result.pb_percentile else "PB N/A"
+    pe_str = f"PE分位 {result.pe_percentile:.0f}% {_valuation_label(result.pe_percentile)}" if result.pe_percentile else "PE N/A"
+    pb_str = f"PB分位 {result.pb_percentile:.0f}% {_valuation_label(result.pb_percentile)}" if result.pb_percentile else "PB N/A"
     summary.add_row(
         f"{pe_str}\n{pb_str}",
         f"RSI {result.rsi_14:.0f}\nMACD {result.macd:.3f}" if result.rsi_14 else "N/A",
@@ -678,8 +690,8 @@ def scan(
     for r in results:
         score_color = "green" if r["score"] >= 70 else ("red" if r["score"] < 50 else "yellow")
         dir_label = {"up": "↑", "down": "↓", "flat": "→"}.get(r["direction"], "?")
-        pe_str = f'{r["pe_pct"]:.0f}%' if r["pe_pct"] else "N/A"
-        pb_str = f'{r["pb_pct"]:.0f}%' if r["pb_pct"] else "N/A"
+        pe_str = f'{r["pe_pct"]:.0f}% {_valuation_label(r["pe_pct"])}' if r["pe_pct"] else "N/A"
+        pb_str = f'{r["pb_pct"]:.0f}% {_valuation_label(r["pb_pct"])}' if r["pb_pct"] else "N/A"
         table.add_row(
             r["code"],
             f'{r["price"]:.2f}',
