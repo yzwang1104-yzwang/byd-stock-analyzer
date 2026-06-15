@@ -28,3 +28,4 @@ Thumbs.db
 .coverage
 htmlcov/
 .prediction_history/
+.position_history/

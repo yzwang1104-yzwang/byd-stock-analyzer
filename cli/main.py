@@ -593,6 +593,119 @@ def backfill(
 
 
 @app.command()
+def position(
+    buy: bool = typer.Option(False, "--buy", help="记录初始买入"),
+    add: bool = typer.Option(False, "--add", help="记录加仓"),
+    price: float = typer.Option(0, "--price", "-p", help="成交价"),
+    shares: int = typer.Option(0, "--shares", help="股数"),
+    stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
+) -> None:
+    """持仓管理——记录买入、查看持仓、加仓判断。"""
+    from core.position_manager import (
+        Position,
+        add_entry,
+        load_position,
+        should_add,
+    )
+
+    # --- 记录买入 ---
+    if buy and price > 0 and shares > 0:
+        pos = add_entry(stock_code=stock, price=price, shares=shares)
+        console.print(f"[green]✓ 已记录买入: {stock} {shares}股 @{price:.2f}[/green]")
+        console.print(f"  持仓成本: {pos.avg_cost:.2f} | 总股数: {pos.total_shares} | 下次加仓触发价: {pos.next_add_price:.2f}")
+        return
+
+    # --- 记录加仓 ---
+    if add and price > 0 and shares > 0:
+        pos = add_entry(stock_code=stock, price=price, shares=shares)
+        console.print(f"[green]✓ 已记录加仓 #{pos.add_count}: {stock} +{shares}股 @{price:.2f}[/green]")
+        console.print(f"  新平均成本: {pos.avg_cost:.2f} | 总股数: {pos.total_shares} | 剩余加仓: {pos.adds_remaining}次")
+        return
+
+    # --- 查看持仓 ---
+    pos = load_position(stock)
+    if not pos or not pos.entries:
+        console.print(f"[yellow]暂无 {stock} 持仓记录[/yellow]")
+        console.print(f"  记录买入: python -m cli.main position --buy --price <价> --shares <股数>")
+        return
+
+    # 获取当前数据做加仓判断
+    from core.data_fetcher import fetch_price_history
+    prices = fetch_price_history(stock_code=stock, days=5, force_refresh=False)
+    cur_price = prices[-1].close if prices else pos.last_price
+
+    import io as _io2
+    _saved2 = sys.stdout
+    sys.stdout = _io2.StringIO()
+    try:
+        from core.analyzers.technical import analyze as at
+        from core.data_fetcher import fetch_normalized_data
+        data = fetch_normalized_data(stock_code=stock, force_refresh=False)
+        result = at(data)
+        from core.scoring import compute as cs
+        sr = cs(result)
+        current_score = sr.score
+    finally:
+        sys.stdout = _saved2
+
+    add_advice = should_add(pos, cur_price, current_score, result.trend)
+    pnl = pos.unrealized_pnl(cur_price)
+
+    # 输出
+    console.print()
+    console.print(f"[bold]{stock} 持仓管理[/bold]")
+    console.print()
+
+    table = Table(title="持仓明细")
+    table.add_column("#", justify="center")
+    table.add_column("日期", justify="center")
+    table.add_column("类型", justify="center")
+    table.add_column("价格", justify="right")
+    table.add_column("股数", justify="right")
+    table.add_column("金额", justify="right")
+    for i, e in enumerate(pos.entries, 1):
+        etype_label = {"initial": "初始买入", "add_1": "加仓#1", "add_2": "加仓#2", "add_3": "加仓#3"}.get(e.entry_type, e.entry_type)
+        table.add_row(str(i), e.date, etype_label, f"{e.price:.2f}", str(e.shares), f"{e.price * e.shares:.0f}")
+    console.print(table)
+
+    console.print()
+    summary = Table(title="持仓汇总")
+    summary.add_column("指标", style="cyan")
+    summary.add_column("数值", justify="right")
+    summary.add_row("平均成本", f"{pos.avg_cost:.2f} 元")
+    summary.add_row("总股数", str(pos.total_shares))
+    summary.add_row("总投入", f"{pos.total_cost:.0f} 元")
+    summary.add_row("当前市值", f"{cur_price * pos.total_shares:.0f} 元")
+    pnl_color = "green" if pnl["pnl"] >= 0 else "red"
+    summary.add_row("浮动盈亏", f"[{pnl_color}]{pnl['pnl']:+.0f} 元 ({pnl['pnl_pct']:+.1f}%)[/{pnl_color}]")
+    summary.add_row("评分", f"{current_score}/100")
+    console.print(summary)
+
+    console.print()
+    console.print("[bold]加仓判断[/bold]")
+    for r in add_advice["reasons"]:
+        console.print(f"  [dim]{r}[/dim]")
+    for w in add_advice["warnings"]:
+        console.print(f"  [yellow]⚠ {w}[/yellow]")
+
+    if add_advice["should_add"]:
+        suggested_shares = pos.total_shares // 2  # 半仓加
+        new_avg = pos.estimated_avg_after_add(cur_price, suggested_shares)
+        console.print()
+        console.print(f"[bold green]⚡ 触发加仓！加 {suggested_shares} 股后成本降至 {new_avg:.2f}[/bold green]")
+        console.print(f"  执行: python -m cli.main position --add --price {cur_price:.2f} --shares {suggested_shares}")
+    else:
+        console.print()
+        console.print(f"[yellow]当前不触发加仓[/yellow]——下次触发价: {pos.next_add_price:.2f} 元")
+        gap = (cur_price / pos.next_add_price - 1) * 100
+        if gap > 0:
+            console.print(f"  还需跌 {gap:.1f}% (从 {cur_price:.2f} → {pos.next_add_price:.2f})")
+
+    console.print()
+    console.print(DISCLAIMER)
+
+
+@app.command()
 def backtest(
     days: int = typer.Option(200, "--days", "-d", help="回测天数"),
     stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
@@ -738,7 +851,7 @@ if __name__ == "__main__":
     #   python -m cli.main --price 91.0           (直接参数, 等同于 analyze)
     import sys as _sys
 
-    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest", "scan"):
+    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest", "scan", "position"):
         app()
     else:
         # 默认走 analyze 命令
