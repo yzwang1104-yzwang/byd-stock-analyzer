@@ -105,5 +105,24 @@
 | OUT-01~05 | 输出体验 | 用户选择 + PITFALLS.md #8 #15 |
 | COMP-01~03 | 合规 | PITFALLS.md #5 |
 
+## Traceability (Phase Mapping)
+
+| REQ-ID | Phase | REQ-ID | Phase | REQ-ID | Phase |
+|--------|:-----:|--------|:-----:|--------|:-----:|
+| DATA-01 | 2 | TECH-01 | 3 | SCOR-01 | 5 |
+| DATA-02 | 2 | TECH-02 | 3 | SCOR-02 | 5 |
+| DATA-03 | 2 | TECH-03 | 3 | SCOR-03 | 6 |
+| DATA-04 | 2 | TECH-04 | 3 | SCOR-04 | 6 |
+| DATA-05 | 2 | TECH-05 | 3 | SCOR-05 | 1 |
+| VALU-01 | 4 | TECH-06 | 3 | SCOR-06 | 5 |
+| VALU-02 | 4 | TECH-07 | 3 | SCOR-07 | 5 |
+| VALU-03 | 4 | SELL-01 | 6 | OUT-01 | 7 |
+| VALU-04 | 4 | SELL-02 | 6 | OUT-02 | 7 |
+| COMP-01 | 7 | COMP-02 | 7 | OUT-03 | 7 |
+| COMP-03 | 7 | — | — | OUT-04 | 7 |
+| — | — | — | — | OUT-05 | 7 |
+
+**Mapped: 33/33 ✓ | Orphans: 0 | Duplicates: 0**
+
 ---
-*Last updated: 2026-06-15 after requirements scoping*
+*Last updated: 2026-06-15 after roadmap traceability*
