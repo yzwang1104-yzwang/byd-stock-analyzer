@@ -124,5 +124,32 @@
 
 **Mapped: 33/33 ✓ | Orphans: 0 | Duplicates: 0**
 
+## v2 Requirements（Phase 11-13: Web + 部署 + 移动端）
+
+### Phase 11: Django Web 仪表盘 (WEB)
+
+- [ ] **WEB-01**: Django 项目骨架——替换 CLI 为 Web 界面
+- [ ] **WEB-02**: ECharts K 线图 + 技术指标叠加
+- [ ] **WEB-03**: 买入评分仪表盘——实时刷新
+- [ ] **WEB-04**: 多股票对比页面
+- [ ] **WEB-05**: 持仓管理界面——买入/加仓/卖出记录
+- [ ] **WEB-06**: 预测历史图表——预测 vs 实际走势
+
+### Phase 12: 部署上线 (DEPLOY)
+
+- [ ] **DEP-01**: Docker 容器化——一键部署
+- [ ] **DEP-02**: 阿里云 ECS 部署——国内访问
+- [ ] **DEP-03**: Nginx + Gunicorn 生产配置
+- [ ] **DEP-04**: PostgreSQL 数据库——替代 CSV/JSON
+- [ ] **DEP-05**: Celery + Redis 定时任务——替代 Cron
+- [ ] **DEP-06**: 自动备份 + 健康检查
+
+### Phase 13: 移动端通知 (MOBILE)
+
+- [ ] **MOB-01**: 微信企业号/公众号推送——买入信号提醒
+- [ ] **MOB-02**: 每日早报——开盘前推送持仓概览
+- [ ] **MOB-03**: 加仓触发推送——实时通知
+- [ ] **MOB-04**: 评分 ≥ 80 红色警报推送
+
 ---
-*Last updated: 2026-06-15 after roadmap traceability*
+*Last updated: 2026-06-15 — v2 requirements added*
