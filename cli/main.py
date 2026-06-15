@@ -63,22 +63,36 @@ def analyze(
     if mock:
         from core.data_fetcher import generate_mock_data
 
-        console.print("[yellow]使用模拟数据（离线模式）[/yellow]\n")
+        console.print("[yellow]使用模拟数据（离线模式）[/yellow]")
         data = generate_mock_data(stock_code=stock, start_price=price)
+        realtime = None
     else:
-        from core.data_fetcher import fetch_normalized_data
+        from core.data_fetcher import fetch_normalized_data, fetch_realtime_quote
 
         try:
             data = fetch_normalized_data(stock_code=stock, force_refresh=True)
+            if data.is_cached:
+                console.print(f"[dim]价格数据: 缓存[/dim]")
+            else:
+                console.print(f"[dim]价格数据: 腾讯 K线 + 东方财富实时[/dim]")
         except Exception as e:
-            console.print(f"[red]数据获取失败: {e}[/red]")
-            console.print("[yellow]切换至模拟数据模式...[/yellow]\n")
+            console.print(f"[red]价格数据获取失败: {e}[/red]")
+            console.print("[yellow]切换至模拟数据...[/yellow]")
             from core.data_fetcher import generate_mock_data
-
             data = generate_mock_data(stock_code=stock, start_price=price)
 
-    if data.is_cached:
-        console.print(f"[dim]数据来源: 缓存 ({data.cache_timestamp})[/dim]")
+        # 实时行情
+        try:
+            realtime = fetch_realtime_quote(stock_code=stock)
+            console.print(
+                f"[dim]实时行情: {realtime.get('f57','')}  "
+                f"现价 {realtime.get('f43',0)/100:.2f}  |  "
+                f"昨收 {realtime.get('f60',0)/100:.2f}  |  "
+                f"PE(静态) {realtime.get('f162',0)/100:.1f}  |  "
+                f"总市值 {realtime.get('f116',0)/1e8:.0f}亿[/dim]"
+            )
+        except Exception:
+            realtime = None
 
     # ---- Phase 3: 技术分析 ----
     from core.analyzers.technical import analyze as analyze_technical
@@ -92,10 +106,10 @@ def analyze(
         sys.stdout = _original_stdout
 
     # ---- Phase 4: 估值分析 ----
-    if not mock:
-        from core.analyzers.valuation import analyze as analyze_valuation
-        from core.data_fetcher import fetch_valuation_data
+    from core.analyzers.valuation import analyze as analyze_valuation
+    from core.data_fetcher import fetch_valuation_data
 
+    if not mock:
         try:
             valuation = fetch_valuation_data(stock_code=stock)
         except Exception:
