@@ -13,9 +13,9 @@ See: `.planning/PROJECT.md` (updated 2026-06-15)
 
 | Property | Value |
 |----------|-------|
-| Active Phase | None (roadmap created, not yet started) |
-| Phase Status | 0/7 phases complete |
-| Last Activity | 2026-06-15 — Project initialized via /gsd-new-project |
+| Active Phase | Phase 7 complete — full pipeline operational |
+| Phase Status | 7/7 phases complete |
+| Last Activity | 2026-06-15 — All 7 phases implemented and committed |
 | Git Branch | main |
 | Requirements | 33 v1 requirements defined |
 
@@ -25,13 +25,13 @@ See: `.planning/PROJECT.md` (updated 2026-06-15)
 
 | # | Phase | Status | Started | Completed |
 |---|-------|--------|---------|-----------|
-| 1 | 项目基础与配置 | ⬜ Pending | — | — |
-| 2 | 数据获取与缓存 | ⬜ Pending | — | — |
-| 3 | 技术指标计算 | ⬜ Pending | — | — |
-| 4 | 估值分析 | ⬜ Pending | — | — |
-| 5 | 评分引擎 | ⬜ Pending | — | — |
-| 6 | 决策逻辑与信号 | ⬜ Pending | — | — |
-| 7 | CLI 输出与合规 | ⬜ Pending | — | — |
+| 1 | 项目基础与配置 | ✅ Done | 2026-06-15 | 2026-06-15 |
+| 2 | 数据获取与缓存 | ✅ Done | 2026-06-15 | 2026-06-15 |
+| 3 | 技术指标计算 | ✅ Done | 2026-06-15 | 2026-06-15 |
+| 4 | 估值分析 | ✅ Done | 2026-06-15 | 2026-06-15 |
+| 5 | 评分引擎 | ✅ Done | 2026-06-15 | 2026-06-15 |
+| 6 | 决策逻辑与信号 | ✅ Done | 2026-06-15 | 2026-06-15 |
+| 7 | CLI 输出与合规 | ✅ Done | 2026-06-15 | 2026-06-15 |
 
 ---
 
