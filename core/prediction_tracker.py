@@ -110,8 +110,27 @@ def get_calibration(stock_code: str) -> dict:
     if stats["status"] != "ok":
         return {"bias_correction": 0.0, "range_multiplier": 1.0, "ready": False}
 
-    # 偏差修正: 如果平均误差 > 0, 说明预测偏低, 需要上调
-    bias = stats["mean_bias"]
+    # 指数加权偏差（排除异常值，最近数据权重更高）
+    records = _load_records(stock_code)
+    filled = [r for r in records if r["actual_close"] and abs(float(r["error"])) < 5.0]
+    if len(filled) >= 3:
+        weighted_errors = []
+        for i, r in enumerate(filled[-10:]):  # 最近10条
+            w = 1.5 ** i  # 越新权重越高: 1, 1.5, 2.25, 3.38...
+            weighted_errors.append(float(r["error"]) * w)
+        bias = sum(weighted_errors) / sum(1.5 ** i for i in range(len(weighted_errors)))
+    else:
+        bias = stats["mean_bias"]
+
+    # 连续命中奖励：连续5+次命中 → 额外收窄
+    consecutive = 0
+    for r in reversed(filled):
+        err = abs(float(r["error"]))
+        if err < 0.3:  # 误差<0.3元视为命中
+            consecutive += 1
+        else:
+            break
+
     # 区间覆盖修正: 如果实际落在区间内的比例 < 50%, 需要扩大区间
     in_range = stats["in_range_pct"]
     range_mult = 1.0
@@ -126,13 +145,20 @@ def get_calibration(stock_code: str) -> dict:
     elif in_range > 70:
         range_mult = 0.85
 
+    # 连续命中奖励
+    if consecutive >= 8:
+        range_mult *= 0.7   # 连续8次命中 → 额外收窄30%
+    elif consecutive >= 5:
+        range_mult *= 0.85  # 连续5次命中 → 额外收窄15%
+
     return {
-        "bias_correction": round(bias * 0.5, 2),  # 只修正一半，避免过调
+        "bias_correction": round(bias * 0.7, 2),  # 提高修正力度: 0.5→0.7
         "range_multiplier": round(range_mult, 2),
         "ready": True,
         "based_on": stats["count"],
         "direction_accuracy": stats["direction_accuracy"],
         "in_range_pct": in_range,
+        "consecutive_hits": consecutive,
     }
 
 
