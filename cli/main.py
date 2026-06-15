@@ -845,13 +845,89 @@ def scan(
     console.print(DISCLAIMER)
 
 
+@app.command()
+def dashboard() -> None:
+    """统一仪表盘——买入时机 + 持仓盈亏 + 加仓信号一览。"""
+    import io as _io
+
+    stocks = ["002594", "920839", "600370", "600567"]
+
+    console.print()
+    console.print(f"[bold]买入时机仪表盘[/bold]")
+    console.print(f"[dim]{datetime.now().strftime('%Y-%m-%d %H:%M')}[/dim]")
+
+    from core.market_context import get_market_regime
+    market = get_market_regime()
+    regime_labels = {"bull": "牛市", "bear": "熊市", "sideways": "震荡"}
+    console.print(f"大盘: {regime_labels.get(market.get('regime','?'),'?')} | "
+                  f"上证50 {market.get('index_level',0):.2f} | "
+                  f"近5日 {market.get('momentum_5d_pct',0):+.1f}%")
+    console.print()
+
+    table = Table(title="买入时机")
+    table.add_column("代码", style="cyan")
+    table.add_column("现价", justify="right")
+    table.add_column("评分", justify="center")
+    table.add_column("距买入", justify="center")
+    table.add_column("最快路径", justify="left")
+    table.add_column("持仓", justify="right")
+
+    from core.position_manager import load_position, should_add
+    from core.buy_timing import calculate_path_to_buy
+
+    for code in stocks:
+        _saved = sys.stdout
+        sys.stdout = _io.StringIO()
+        try:
+            from core.data_fetcher import fetch_normalized_data, fetch_valuation_data
+            data = fetch_normalized_data(stock_code=code, force_refresh=False)
+            from core.analyzers.technical import analyze as at
+            result = at(data)
+            try:
+                valuation = fetch_valuation_data(stock_code=code)
+            except Exception:
+                valuation = None
+            from core.analyzers.valuation import analyze as av
+            result = av(result, valuation)
+            from core.scoring import compute as cs
+            sr = cs(result)
+            timing = calculate_path_to_buy(
+                sr.score, result.pe_percentile, result.pb_percentile,
+                result.trend, data.latest_price, result.ma_20, result.ma_50
+            )
+        finally:
+            sys.stdout = _saved
+
+        pos = load_position(code)
+        pos_str = ""
+        if pos:
+            pnl = pos.unrealized_pnl(data.latest_price)
+            pos_str = f"{pos.total_shares}股 {pnl['pnl_pct']:+.1f}%"
+            if pos.can_add and data.latest_price <= pos.next_add_price:
+                pos_str += " [加仓]"
+
+        best_path = (timing["paths"][0]["description"][:30] + "...") if timing["paths"] else "条件复杂"
+        need_str = "[green]可买入[/green]" if timing["at_buy"] else f"[yellow]-{timing['need_pts']}分[/yellow]"
+        score_color = "green" if sr.score >= 70 else ("yellow" if sr.score >= 56 else "red")
+
+        table.add_row(
+            code, f"{data.latest_price:.2f}",
+            f"[{score_color}]{sr.score}[/{score_color}]",
+            need_str, best_path, pos_str or "—",
+        )
+
+    console.print(table)
+    console.print()
+    console.print(DISCLAIMER)
+
+
 if __name__ == "__main__":
     # 支持两种调用方式:
     #   python -m cli.main analyze --price 91.0  (typer 子命令)
     #   python -m cli.main --price 91.0           (直接参数, 等同于 analyze)
     import sys as _sys
 
-    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest", "scan", "position"):
+    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest", "scan", "position", "dashboard"):
         app()
     else:
         # 默认走 analyze 命令
