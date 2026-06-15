@@ -301,6 +301,17 @@ def predict(
     finally:
         sys.stdout = _saved
 
+    # ====== 大盘环境（新增维度） ======
+    from core.market_context import (
+        get_market_regime,
+        market_boost,
+        market_range_multiplier,
+    )
+    market = get_market_regime()
+    advice.score = int(market_boost(advice.score, market))
+    advice.score = min(100, max(0, advice.score))
+    mkt_mult = market_range_multiplier(market)
+
     # ====== 价格预测（融合技术指标） ======
     closes = [p.close for p in prices[-20:]]
     avg = _stats.mean(closes)
@@ -339,7 +350,7 @@ def predict(
 
     cal = get_calibration(stock)
     pred_close = cur_price + momentum * 0.3 + ma_bias + rsi_bias + cal.get("bias_correction", 0.0)
-    pred_range = atr_range * cal.get("range_multiplier", 1.0)
+    pred_range = atr_range * cal.get("range_multiplier", 1.0) * mkt_mult
     pred_low = pred_close - pred_range
     pred_high = pred_close + pred_range
 
@@ -420,6 +431,20 @@ def predict(
         factors.append(f"RSI修正 {rsi_bias:+.2f}")
     if factors:
         console.print(f"[dim]预测因子: {' | '.join(factors)} | 区间基于 ATR({result.atr_14:.2f})[/dim]")
+    # 市场环境
+    if market.get("note") == "OK":
+        regime_labels = {"bull": "牛市 ↑", "bear": "熊市 ↓", "sideways": "震荡 →"}
+        regime_style = {"bull": "green", "bear": "red", "sideways": "yellow"}
+        rl = regime_labels.get(market["regime"], "?")
+        rs = regime_style.get(market["regime"], "white")
+        boost_str = f"评分{market_boost(0, market):+.0f}" if market_boost(0, market) != 0 else "评分不变"
+        console.print(
+            f"[dim]大盘环境: [{rs}]{rl}[/{rs}] | "
+            f"上证50 {market['index_level']:.2f} | "
+            f"近5日 {market['momentum_5d_pct']:+.1f}% | "
+            f"RSI {market['market_rsi']} | "
+            f"{boost_str} | 区间×{mkt_mult}[/dim]"
+        )
 
     # --- 方向预测 + 二维决策 ---
     from core.backtester import predict_direction
