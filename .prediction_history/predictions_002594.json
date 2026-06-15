@@ -22,5 +22,29 @@
     "confidence": "жа",
     "actual_close": "",
     "error": ""
+  },
+  {
+    "id": 3,
+    "timestamp": "2026-06-15T10:06:18.969010",
+    "date": "2026-06-15",
+    "predicted_low": 89.82,
+    "predicted_high": 92.63,
+    "predicted_close": 91.22,
+    "current_price": 91.07,
+    "confidence": "жа",
+    "actual_close": "",
+    "error": ""
+  },
+  {
+    "id": 4,
+    "timestamp": "2026-06-15T10:07:15.244293",
+    "date": "2026-06-15",
+    "predicted_low": 89.75,
+    "predicted_high": 92.56,
+    "predicted_close": 91.15,
+    "current_price": 91.01,
+    "confidence": "жа",
+    "actual_close": "",
+    "error": ""
   }
 ]

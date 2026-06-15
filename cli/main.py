@@ -287,7 +287,7 @@ def predict(
     finally:
         sys.stdout = _saved
 
-    # ====== 价格预测 ======
+    # ====== 价格预测（融合技术指标） ======
     closes = [p.close for p in prices[-20:]]
     avg = _stats.mean(closes)
     stdev = _stats.stdev(closes)
@@ -295,9 +295,37 @@ def predict(
     ranges = [(p.high - p.low) / p.open * 100 for p in prices[-10:]]
     avg_range = _stats.mean(ranges)
 
+    # 近期动量（3日涨跌幅加权）
+    momentum = 0.0
+    if len(prices) >= 4:
+        momentum = (
+            (prices[-1].close - prices[-2].close) * 0.5 +
+            (prices[-2].close - prices[-3].close) * 0.3 +
+            (prices[-3].close - prices[-4].close) * 0.2
+        )
+
+    # ATR 波动率预测区间
+    atr_range = result.atr_14 * 0.6 if result.atr_14 else stdev * 0.4
+
+    # MA 位置修正
+    ma_bias = 0.0
+    if result.ma_20 and result.ma_50:
+        if cur_price > result.ma_20:
+            ma_bias = -0.1  # 高于MA20，均值回归向下
+        elif cur_price < result.ma_50:
+            ma_bias = +0.1  # 低于MA50，均值回归向上
+
+    # RSI 极端修正
+    rsi_bias = 0.0
+    if result.rsi_14:
+        if result.rsi_14 < 30:
+            rsi_bias = +0.3  # 超卖，反弹概率大
+        elif result.rsi_14 > 70:
+            rsi_bias = -0.3  # 超买，回调概率大
+
     cal = get_calibration(stock)
-    pred_close = cur_price + cal.get("bias_correction", 0.0)
-    pred_range = stdev * 0.4 * cal.get("range_multiplier", 1.0)
+    pred_close = cur_price + momentum * 0.3 + ma_bias + rsi_bias + cal.get("bias_correction", 0.0)
+    pred_range = atr_range * cal.get("range_multiplier", 1.0)
     pred_low = pred_close - pred_range
     pred_high = pred_close + pred_range
 
@@ -358,6 +386,17 @@ def predict(
     console.print(pred_table)
     if cal_info:
         console.print(f"[dim]{cal_info}[/dim]")
+
+    # 预测因子明细
+    factors = []
+    if abs(momentum) > 0.01:
+        factors.append(f"动量 {momentum:+.2f}")
+    if abs(ma_bias) > 0.01:
+        factors.append(f"MA回归 {ma_bias:+.2f}")
+    if abs(rsi_bias) > 0.01:
+        factors.append(f"RSI修正 {rsi_bias:+.2f}")
+    if factors:
+        console.print(f"[dim]预测因子: {' | '.join(factors)} | 区间基于 ATR({result.atr_14:.2f})[/dim]")
 
     # --- 关键指标摘要 ---
     console.print()
