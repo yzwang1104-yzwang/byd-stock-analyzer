@@ -535,6 +535,9 @@ def backfill(
     stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
 ) -> None:
     """回填实际收盘价，计算预测误差。"""
+    if price <= 0:
+        console.print(f"[red]错误: 价格必须为正数，收到 {price}[/red]")
+        return
     from core.prediction_tracker import backfill_actual, compute_accuracy
 
     n = backfill_actual(stock_code=stock, actual_price=price)
