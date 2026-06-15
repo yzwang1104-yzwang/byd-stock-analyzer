@@ -13,8 +13,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-15)
 
 | Property | Value |
 |----------|-------|
-| Active Phase | Phase 7 complete — full pipeline operational |
-| Phase Status | 7/7 phases complete |
+| Active Phase | Phase 10 complete — prediction + calibration + cron live |
+| Phase Status | 10/10 phases complete |
 | Last Activity | 2026-06-15 — All 7 phases implemented and committed |
 | Git Branch | main |
 | Requirements | 33 v1 requirements defined |

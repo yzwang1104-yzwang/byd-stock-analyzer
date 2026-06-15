@@ -2,7 +2,7 @@
 
 **Generated:** 2026-06-15
 **Granularity:** Fine (7 phases)
-**Coverage:** 33/33 v1 requirements mapped
+**Coverage:** 33/33 v1 + 3 extended phases (prediction system)
 
 ---
 
@@ -17,8 +17,11 @@
 | 5 | 评分引擎 | 加权综合评分 + 偏差防护 | SCOR-01,02,06,07 | 2 |
 | 6 | 决策逻辑与信号 | 操作建议 + 仓位 + 卖出信号 | SCOR-03,04, SELL-01,02 | 2 |
 | 7 | CLI 输出与合规 | 专业终端输出 + 合规 | OUT-01~05, COMP-01~03 | 2 |
+| 8 | 价格预测系统 | ATR预测 + 记录 + 校准 | — | 2 |
+| 9 | 方向预测+回测 | 6指标投票 + 300天回测 | — | 2 |
+| 10 | 自动校准+调度 | 自动回填 + Cron + 警报 | — | 2 |
 
-**Dependency chain:** 1 → 2 → 3 → 4 → 5 → 6 → 7（严格线性）
+**Dependency chain:** 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
 ---
 
