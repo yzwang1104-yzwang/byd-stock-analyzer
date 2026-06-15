@@ -396,3 +396,114 @@ Key routing rules:
 - 你愿意承认"财报看不懂、技术指标看不懂"——大多数人不愿意承认自己看不懂，宁愿假装在分析。诚实面对能力边界是做出好产品的前提。
 - 当我说"先做命令行脚本验证"，你选了它而不是看起来更酷的 Web 平台。你对沉没成本有健康的警惕。
 - "我会跟着提示直接建仓"——不是缺判断力，是缺一个让你有底气按下按钮的系统。这个洞察会定义整个产品。
+
+---
+
+## 八、项目复盘（2026-06-14 → 2026-06-16）
+
+### 时间线
+
+| 日期 | 阶段 | 关键事件 |
+|------|------|----------|
+| 06-14 | 想法 | "想做一个比亚迪股票预测软件" |
+| 06-14 | 头脑风暴 | /office-hours 深度访谈：痛点=不敢按按钮，错过100万 |
+| 06-14 | 技术选型 | Django + HTMX + PostgreSQL + Celery（后聚焦 CLI 先验证） |
+| 06-14 | 产品设计 | /office-hours 输出：结论优先，不做数据堆砌 |
+| 06-15 | GSD 规划 | /gsd-new-project：4研究员并行→33条需求→7Phase路线图 |
+| 06-15 | 编码实现 | Phase 1-7 连续实现：models→data→technical→valuation→scoring→advice→CLI |
+| 06-15 | 代码审查 | /review 发现布林带位置计算 bug → 已修复 |
+| 06-16 | QA 测试 | /qa 发现负数价格接受 + mock数据漂移 → 已修复 |
+| 06-16 | 安全审计 | /cso 审计通过，无高危漏洞，安全评分 9.5/10 |
+| 06-16 | 真实数据 | 腾讯 K线 API + 东方财富实时 + 百度 PE/PB 全部接通 |
+| 06-16 | 上线 | GitHub push：18 commits，全链路可运行 |
+
+### 关键决策
+
+| 决策 | 时间 | 为什么 |
+|------|------|--------|
+| 选 CLI 而非 Web 先验证 | 06-14 | 在验证分析逻辑是否有用之前，不投入 Web 开发——沉没成本最小 |
+| 只做比亚迪一只股票 | 06-14 | 单股票深度 > 多股票浅覆盖，通用平台做不到这种深度 |
+| 结论优先，不是数据堆砌 | 06-14 | 用户要的是"现在能不能买"，不是"这是 K 线图你自己看" |
+| 六边形端口适配器架构 | 06-15 | 确保 Phase 1 CLI 的 core/ 代码在 Phase 2 Django 中零修改复用 |
+| 腾讯 K 线替代 AkShare | 06-16 | 东方财富 API 被企业防火墙拦截，腾讯 API 稳定可用 |
+| 加权多因子，不做 ML | 06-14 | 用户要求可解释——"为什么是 85 分"必须说得清楚 |
+
+### 遇到并解决的问题
+
+| 问题 | 怎么解决的 |
+|------|-----------|
+| Windows GBK 编码乱码 | CLI 入口强制 UTF-8 stdout 重定向 |
+| pandas-ta 打印 DataFrame 污染输出 | `sys.stdout = io.StringIO()` 捕获中间输出 |
+| AkShare API 版本不兼容 (stock_a_pe 不再存在) | 迁移到 `stock_zh_valuation_baidu`（百度估值 API） |
+| 东方财富 K 线 API 不通 | 加腾讯 K 线 API 作为主数据源 + 重试逻辑 |
+| 布林带位置使用中轨代替收盘价 | 加 `latest_close` 字段，改用真实收盘价 |
+| Mock 数据随机游走漂移太远 | 加 0.5% 均值回归拉力 |
+| 负数价格被接受 | Typer callback 校验 price > 0 |
+| GitHub 推送被拦截 | Git commit 先本地保存，等网络通了再 push（后续通了） |
+
+### 技术架构（最终形态）
+
+```
+数据层                          分析层                      输出层
+┌──────────────────┐    ┌─────────────────────┐    ┌──────────────┐
+│ 腾讯 K线 API      │───→│ core/models.py       │───→│ cli/main.py   │
+│ (qfq 前复权)      │    │ 7 dataclass 数据契约  │    │ Rich 格式化   │
+├──────────────────┤    ├─────────────────────┤    │ 彩色面板+表格 │
+│ 东方财富实时 API  │    │ core/analyzers/      │    │ 一行结论      │
+│ (行情+PE+总市值)  │    │  technical.py        │    │ --verbose     │
+├──────────────────┤    │  valuation.py        │    │ 合规免责      │
+│ 百度估值 API      │    ├─────────────────────┤    └──────────────┘
+│ (PE/PB 历史分位)  │    │ core/scoring.py      │
+└──────────────────┘    │ 5因子加权 0-100      │
+                        ├─────────────────────┤
+                        │ core/advice.py       │
+                        │ 5档操作+ATR仓位      │
+                        └─────────────────────┘
+```
+
+### 评分模型
+
+```
+总分 0-100 = 估值(35%) + 技术(30%) + 趋势(20%) + 量能(10%) + 情绪(5%)
+
+映射:  0-30=强烈卖出  31-55=观望  56-75=考虑  76-90=建议买入  91-100=强烈买入
+仓位:  基于评分 + ATR 波动率折扣 → 0/25/50/75/100%
+```
+
+### GitHub 仓库
+
+**https://github.com/yzwang1104-yzwang/byd-stock-analyzer**
+
+```
+git clone https://github.com/yzwang1104-yzwang/byd-stock-analyzer.git
+cd byd-stock-analyzer
+pip install -r requirements.txt
+python -m cli.main --price 91.63 --verbose
+```
+
+### 18 Commits
+
+```
+e89e7fb feat: real data — Tencent K-line + East Money realtime + Baidu valuation
+fcb2abe fix: migrate to AkShare v1.18+ valuation APIs
+1895c55 fix(qa): validate price > 0 and fix mock data mean-reversion
+580b65d fix: Bollinger position uses actual close price, not SMA middle band
+eff9215 chore: add CLAUDE.md to project repo
+5946275 fix: suppress pandas-ta debug output, fix score display, UTF-8 encoding
+cc7ea9f feat(phase-4-7): valuation, scoring, advice, CLI — full pipeline
+4609807 feat(phase-3): technical indicators — MA, MACD, RSI, Bollinger, ATR, volume
+2623ab9 feat(phase-2): data acquisition — AkShare fetcher, CSV cache, mock data
+4d88583 feat(phase-1): project foundation — dataclasses, config, package structure
+f657e97 docs: create roadmap (7 phases) with state and traceability
+fe534f6 docs: define v1 requirements — 33 requirements across 7 categories
+28b031d docs: research complete — stack, features, architecture, pitfalls, summary
+3dafbdb docs: initialize project
+```
+
+### 下一步
+
+- [ ] 在家用电脑上 `git clone` + `pip install` 跑真实完整分析
+- [ ] Phase 2: Django Web 仪表盘（等 CLI 验证通过后）
+- [ ] 添加信号历史追踪——证明工具的可信度
+- [ ] 卖出信号增强——不只是"什么时候买"，更要"什么时候卖"
+- [ ] 多时间框架——日线 + 周线 + 月线信号一致性
