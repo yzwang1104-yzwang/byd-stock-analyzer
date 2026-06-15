@@ -470,5 +470,61 @@ def backfill(
         console.print(f"  区间命中率:   {stats['in_range_pct']:.0f}%")
 
 
+@app.command()
+def backtest(
+    days: int = typer.Option(200, "--days", "-d", help="回测天数"),
+    stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
+) -> None:
+    """6指标投票法回测——验证方向预测准确率。"""
+    from core.backtester import backtest_direction
+
+    console.print(f"[bold]方向预测回测 (6指标投票法)[/bold]")
+    console.print(f"股票: {stock} | 回测天数: {days}")
+    console.print()
+
+    with console.status("[bold green]回测中..."):
+        result = backtest_direction(stock_code=stock, days=days)
+
+    if result["status"] != "ok":
+        console.print(f"[red]回测失败: {result.get('status')}, 数据量: {result.get('count', 0)}[/red]")
+        return
+
+    # 总览
+    console.print(f"[bold]纯方向准确率: {result['directional_accuracy']}%[/bold] "
+                  f"({result['directional_total']} 次有信号)")
+    console.print(f"  含\"平\"总准确率: {result['overall_accuracy']}% ({result['total']} 次)")
+    console.print(f"  无信号(平)比例: {result['flat_rate']}% ({result['flat_count']}/{result['total']})")
+    console.print(f"  预测涨准确率: {result['up_accuracy']}%")
+    console.print(f"  预测跌准确率: {result['down_accuracy']}%")
+    console.print(f"  近10次准确率: {result['recent_10_accuracy']}%")
+    console.print()
+
+    # 按置信度
+    conf_table = Table(title="按置信度分组")
+    conf_table.add_column("置信度", justify="center")
+    conf_table.add_column("次数", justify="right")
+    conf_table.add_column("准确率", justify="right")
+    h = result
+    conf_table.add_row("高(≥70%)", str(h["high_conf_count"]), f"{h['high_conf_accuracy']}%")
+    conf_table.add_row("中(50-69%)", str(h["med_conf_count"]), f"{h['med_conf_accuracy']}%")
+    conf_table.add_row("低(<50%)", str(h["low_conf_count"]), f"{h['low_conf_accuracy']}%")
+    console.print(conf_table)
+
+    # 最近5条样本
+    console.print()
+    console.print("[bold]最近5条预测样本[/bold]")
+    for r in result["sample_results"]:
+        mark = "[green]✓[/green]" if r["correct"] else "[red]✗[/red]"
+        conf_str = f"({r['confidence']}%)"
+        console.print(
+            f"  {mark} {r['date']} {r['close']:.2f} | "
+            f"预测: {r['predicted']} {conf_str} | 实际: {r['actual']}"
+        )
+        console.print(f"    [dim]信号: {' | '.join(r['signals'][:3])}[/dim]")
+
+    console.print()
+    console.print(DISCLAIMER)
+
+
 if __name__ == "__main__":
     app()
