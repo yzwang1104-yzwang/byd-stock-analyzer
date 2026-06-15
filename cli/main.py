@@ -41,9 +41,16 @@ DISCLAIMER = (
 )
 
 
+def _validate_price(value: float) -> float:
+    """校验价格为正数。"""
+    if value <= 0:
+        raise typer.BadParameter(f"股价必须为正数，收到: {value}")
+    return value
+
+
 @app.command()
 def analyze(
-    price: float = typer.Option(..., "--price", "-p", help="比亚迪当前股价（元）"),
+    price: float = typer.Option(..., "--price", "-p", help="比亚迪当前股价（元）", callback=_validate_price),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="显示详细指标"),
     mock: bool = typer.Option(False, "--mock", help="使用模拟数据（离线模式）"),
     stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),

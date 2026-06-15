@@ -303,10 +303,11 @@ def generate_mock_data(
     today = date.today()
 
     for i in range(days, 0, -1):
-        # 随机游走 + 均值回归
+        # 均值回归随机游走：价格围绕 start_price 波动
         daily_return = random.gauss(0.0002, 0.025)  # 日均 +0.02%, σ=2.5%
         price *= (1 + daily_return)
-        price = max(price, 30.0)  # 防止负数
+        price = price * 0.995 + start_price * 0.005  # 均值回归拉力 0.5%
+        price = max(price, 10.0)  # 防止负数
 
         bar_date = today - timedelta(days=i)
         open_price = price * random.uniform(0.99, 1.01)
