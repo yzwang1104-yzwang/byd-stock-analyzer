@@ -497,6 +497,60 @@ cc7ea9f feat(phase-4-7): valuation, scoring, advice, CLI — full pipeline
 f657e97 docs: create roadmap (7 phases) with state and traceability
 fe534f6 docs: define v1 requirements — 33 requirements across 7 categories
 28b031d docs: research complete — stack, features, architecture, pitfalls, summary
+
+### 预测系统开发（2026-06-15）
+
+| Commit | 内容 |
+|--------|------|
+| fa0c39e | 项目复盘写入 CLAUDE.md |
+| 284910b | 预测追踪系统——record/backfill/calibrate |
+| cbb6346 | predict + analyze 合并为一个命令 |
+| f0ade97 | 技术因子预测模型——ATR+动量+MA+RSI |
+| f2ede96 | 方向预测集成计划（4 task） |
+| 5bf9455 | 回测引擎——6指标投票法+趋势过滤 |
+| 90222ca | 方向预测+二维决策矩阵集成到 predict |
+| 872a285 | 审查修复——MACD死代码/封装泄露/双重获取 |
+
+### 预测系统架构
+
+```
+predict 命令
+  ├── 数据层: fetch_normalized_data (腾讯K线 + 东方财富实时 + 百度估值)
+  ├── 分析层: 技术指标 → 估值分析 → 5因子评分 → 决策建议
+  ├── 价格预测: ATR波动率 × 动量 × MA回归 × RSI修正 × 校准偏差
+  ├── 方向预测: 6指标投票 (MACD/RSI/MA/布林带/量价/动量) + 趋势过滤
+  ├── 二维决策: 评分 × 方向 → 6种操作建议
+  ├── 追踪校准: record_prediction → backfill_actual → get_calibration
+  └── 回测验证: backtest_direction (300天历史, 纯方向准确率 ~48%)
+```
+
+### 预测模型诚实结论
+
+| 指标 | 天花板 | 原因 |
+|------|:--:|------|
+| 价格区间 | 可优化 | ATR 真实波动率 + 持续校准 |
+| 方向预测 | ~48-52% | 短期方向接近随机（市场有效假说） |
+| 买入评分 | 可靠 | 估值分位 + 趋势 = 有经济学意义的信号 |
+
+**核心洞察:** 6指标投票法在300天回测中纯方向准确率48%，跌准确率51%——接近抛硬币。这不是代码问题，是短期价格运动的本质。真正有价值的信号是买入评分（估值+趋势）和价格区间（ATR波动率）。方向预测仅作辅助参考，不独立决策。
+
+### 回填校准数据
+
+```
+#1-4: 预测区间 90.24-92.08, 实际 91.11, 全部命中, 偏差 -0.06
+#5-10: 待回填（上午收盘后执行 backfill）
+校准: 偏差修正 -0.03, 方向准确率 100%(4/4, 样本太小)
+循环: Cron f7764203, 每10分钟自动 predict
+```
+
+### 循环运行方式
+
+```bash
+python -m cli.main predict              # 预测+建议（盘中随时）
+python -m cli.main backfill --price XX  # 回填实际价（收盘后）
+python -m cli.main backtest --days 300  # 回测验证
+python -m cli.main --price 91.0         # 快速分析（向后兼容）
+```
 3dafbdb docs: initialize project
 ```
 
