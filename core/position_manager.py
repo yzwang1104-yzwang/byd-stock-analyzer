@@ -21,6 +21,7 @@ class Entry:
 class Position:
     stock_code: str
     entries: list[Entry] = field(default_factory=list)
+    trigger_base: float | None = None  # 手动覆盖加仓基线
 
     @property
     def avg_cost(self) -> float:
@@ -52,8 +53,9 @@ class Position:
 
     @property
     def next_add_price(self) -> float:
-        """下次加仓触发价 = 最近成交价 × 90%"""
-        return round(self.last_price * 0.9, 2)
+        """下次加仓触发价 = 基线 × 90%"""
+        base = self.trigger_base if self.trigger_base else self.last_price
+        return round(base * 0.9, 2)
 
     @property
     def can_add(self) -> bool:
@@ -81,7 +83,7 @@ def load_position(stock_code: str) -> Optional[Position]:
     try:
         data = json.loads(path.read_text())
         entries = [Entry(**e) for e in data.get("entries", [])]
-        return Position(stock_code=data["stock_code"], entries=entries)
+        return Position(stock_code=data["stock_code"], entries=entries, trigger_base=data.get("trigger_base"))
     except (json.JSONDecodeError, KeyError):
         return None
 
@@ -91,6 +93,7 @@ def save_position(pos: Position) -> None:
     path = POSITION_FILE / f"{pos.stock_code}.json"
     data = {
         "stock_code": pos.stock_code,
+        "trigger_base": pos.trigger_base,
         "entries": [{"date": e.date, "price": e.price, "shares": e.shares, "entry_type": e.entry_type} for e in pos.entries],
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
