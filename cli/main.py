@@ -497,6 +497,37 @@ def predict(
     console.print(DISCLAIMER)
     console.print()
 
+    # --- 自动回填 ---
+    _auto_backfill(stock, cur_price)
+
+
+def _auto_backfill(stock: str, current_price: float) -> None:
+    """用当前价自动回填超过30分钟的旧预测。"""
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+    from pathlib import Path as _Path
+
+    records_file = _Path(".prediction_history") / f"predictions_{stock}.json"
+    if not records_file.exists():
+        return
+    records = _json.loads(records_file.read_text())
+    now = _dt.now()
+    backfilled = 0
+    for r in records:
+        if r["actual_close"]:
+            continue
+        try:
+            ts = _dt.fromisoformat(r["timestamp"])
+        except ValueError:
+            continue
+        if now - ts > _td(minutes=30):
+            r["actual_close"] = round(current_price, 2)
+            r["error"] = round(current_price - float(r["predicted_close"]), 2)
+            backfilled += 1
+    if backfilled:
+        records_file.write_text(_json.dumps(records, ensure_ascii=False, indent=2))
+        console.print(f"[dim]自动回填: {backfilled} 条旧预测 → 实际价 {current_price:.2f}[/dim]")
+
 
 @app.command()
 def backfill(
