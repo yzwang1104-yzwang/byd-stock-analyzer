@@ -110,52 +110,75 @@ def get_calibration(stock_code: str) -> dict:
     if stats["status"] != "ok":
         return {"bias_correction": 0.0, "range_multiplier": 1.0, "ready": False}
 
-    # 指数加权偏差（排除异常值，最近数据权重更高）
+    # 中位数偏差 + 指数加权（排除异常值）
     records = _load_records(stock_code)
     filled = [r for r in records if r["actual_close"] and abs(float(r["error"])) < 5.0]
     if len(filled) >= 3:
-        weighted_errors = []
-        for i, r in enumerate(filled[-10:]):  # 最近10条
-            w = 1.5 ** i  # 越新权重越高: 1, 1.5, 2.25, 3.38...
-            weighted_errors.append(float(r["error"]) * w)
-        bias = sum(weighted_errors) / sum(1.5 ** i for i in range(len(weighted_errors)))
+        import statistics as _st
+        # 中位数偏差——比均值更稳健（不受极端值影响）
+        median_bias = _st.median([float(r["error"]) for r in filled])
+        # 指数加权偏差（最近10条）
+        recent = filled[-10:]
+        weighted = [float(r["error"]) * (1.5 ** i) for i, r in enumerate(recent)]
+        ewma_bias = sum(weighted) / sum(1.5 ** i for i in range(len(weighted)))
+        # 中位数和EWMA取平均
+        bias = (median_bias + ewma_bias) / 2
     else:
         bias = stats["mean_bias"]
 
-    # 连续命中奖励：连续5+次命中 → 额外收窄
+    # 样本量越大，修正力度越强
+    n = len(filled)
+    if n >= 30:
+        correction_strength = 0.90  # 30+样本：90%修正
+    elif n >= 15:
+        correction_strength = 0.75
+    elif n >= 5:
+        correction_strength = 0.60
+    else:
+        correction_strength = 0.50
+
+    # 连续命中：连续N次误差<阈值
+    threshold = 0.3 if n < 10 else 0.2  # 样本多了收紧阈值
     consecutive = 0
     for r in reversed(filled):
-        err = abs(float(r["error"]))
-        if err < 0.3:  # 误差<0.3元视为命中
+        if abs(float(r["error"])) < threshold:
             consecutive += 1
         else:
             break
 
-    # 区间覆盖修正: 如果实际落在区间内的比例 < 50%, 需要扩大区间
+    # 区间收窄
     in_range = stats["in_range_pct"]
     range_mult = 1.0
     if in_range < 40:
         range_mult = 1.5
     elif in_range < 60:
         range_mult = 1.2
+    elif in_range >= 98:
+        range_mult = 0.35  # 几乎完美 → 激进收窄
     elif in_range >= 95:
-        range_mult = 0.5  # 几乎全命中 → 大幅收窄
+        range_mult = 0.50
+    elif in_range >= 90:
+        range_mult = 0.65
     elif in_range >= 85:
-        range_mult = 0.7  # 多数命中 → 适度收窄
+        range_mult = 0.75
     elif in_range > 70:
         range_mult = 0.85
 
-    # 连续命中奖励
-    if consecutive >= 8:
-        range_mult *= 0.7   # 连续8次命中 → 额外收窄30%
+    # 连续命中奖励（更激进）
+    if consecutive >= 15:
+        range_mult *= 0.55
+    elif consecutive >= 10:
+        range_mult *= 0.70
     elif consecutive >= 5:
-        range_mult *= 0.85  # 连续5次命中 → 额外收窄15%
+        range_mult *= 0.80
+    elif consecutive >= 3:
+        range_mult *= 0.90
 
     return {
-        "bias_correction": round(bias * 0.7, 2),  # 提高修正力度: 0.5→0.7
+        "bias_correction": round(bias * correction_strength, 2),
         "range_multiplier": round(range_mult, 2),
         "ready": True,
-        "based_on": stats["count"],
+        "based_on": n,
         "direction_accuracy": stats["direction_accuracy"],
         "in_range_pct": in_range,
         "consecutive_hits": consecutive,
