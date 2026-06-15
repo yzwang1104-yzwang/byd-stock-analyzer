@@ -364,6 +364,15 @@ def predict(
     panel = Panel(body, title=header, border_style=color, padding=(1, 2))
     console.print(panel)
 
+    # --- 买入警报（评分 ≥ 80） ---
+    if advice.score >= 80:
+        alert_text = (
+            f"[bold white on red]  ⚡ 买入时机成熟！评分 {advice.score}/100 — 建议立即加仓 ⚡  [/bold white on red]\n"
+            f"[bold red]  建议仓位: {advice.position_pct}%  |  {advice.action_label}  |  {advice.rationale}[/bold red]"
+        )
+        alert_panel = Panel(alert_text, border_style="bold red", padding=(1, 1))
+        console.print(alert_panel)
+
     # --- 预测面板 ---
     cal_info = ""
     if cal["ready"]:
