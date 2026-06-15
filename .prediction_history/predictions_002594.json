@@ -10,5 +10,17 @@
     "confidence": "жа",
     "actual_close": "",
     "error": ""
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-06-15T10:01:15.879351",
+    "date": "2026-06-15",
+    "predicted_low": 90.24,
+    "predicted_high": 91.98,
+    "predicted_close": 91.11,
+    "current_price": 91.11,
+    "confidence": "жа",
+    "actual_close": "",
+    "error": ""
   }
 ]

@@ -222,26 +222,72 @@ def _render_output(advice, score_result, analysis, price, verbose):
 @app.command()
 def predict(
     stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="显示详细指标"),
 ) -> None:
-    """预测今日上午收盘价并记录。"""
+    """比亚迪上午收盘预测 + 买入建议（合二为一）。"""
     import io as _io, statistics as _stats
-    from datetime import date as _date
 
-    from core.data_fetcher import fetch_price_history
-    from core.prediction_tracker import compute_accuracy, get_calibration, record_prediction
+    from core.data_fetcher import (
+        fetch_normalized_data,
+        fetch_price_history,
+        fetch_realtime_quote,
+        fetch_valuation_data,
+    )
+    from core.prediction_tracker import get_calibration, record_prediction
 
-    console.print(f"[bold]比亚迪 002594 上午收盘预测[/bold]")
-    console.print(f"时间: {datetime.now().strftime('%H:%M:%S')}")
+    now = datetime.now()
+    console.print()
+    console.print(f"[bold]比亚迪 002594 实时分析[/bold]")
+    console.print(f"时间: {now.strftime('%Y-%m-%d %H:%M')}")
     console.print()
 
-    # 获取数据
-    prices = fetch_price_history(stock_code=stock, days=30, force_refresh=True)
-
+    # ====== 数据 ======
+    prices = fetch_price_history(stock_code=stock, days=500, force_refresh=True)
     if not prices:
-        console.print("[red]数据获取失败[/red]")
+        console.print("[red]价格数据获取失败[/red]")
         return
-
     latest = prices[-1]
+    cur_price = latest.close
+
+    # 实时行情
+    try:
+        rt = fetch_realtime_quote(stock_code=stock)
+        rt_price = rt.get("f43", 0) / 100
+        rt_pe = rt.get("f162", 0) / 100
+        rt_mcap = rt.get("f116", 0) / 1e8
+        if rt_price > 0:
+            cur_price = rt_price
+        console.print(
+            f"[dim]实时: {rt.get('f57','')} {cur_price:.2f}  |  "
+            f"PE {rt_pe:.1f}  |  市值 {rt_mcap:.0f}亿  |  "
+            f"昨收 {rt.get('f60',0)/100:.2f}[/dim]"
+        )
+    except Exception:
+        pass
+
+    console.print()
+
+    # ====== 完整分析流水线 ======
+    _saved = sys.stdout
+    sys.stdout = _io.StringIO()
+    try:
+        data = fetch_normalized_data(stock_code=stock, force_refresh=False)
+        from core.analyzers.technical import analyze as analyze_technical
+        result = analyze_technical(data)
+        try:
+            valuation = fetch_valuation_data(stock_code=stock)
+        except Exception:
+            valuation = None
+        from core.analyzers.valuation import analyze as analyze_valuation
+        result = analyze_valuation(result, valuation)
+        from core.scoring import compute as compute_score
+        score_result = compute_score(result)
+        from core.advice import generate as generate_advice
+        advice = generate_advice(score_result, result, current_price=cur_price)
+    finally:
+        sys.stdout = _saved
+
+    # ====== 价格预测 ======
     closes = [p.close for p in prices[-20:]]
     avg = _stats.mean(closes)
     stdev = _stats.stdev(closes)
@@ -249,32 +295,117 @@ def predict(
     ranges = [(p.high - p.low) / p.open * 100 for p in prices[-10:]]
     avg_range = _stats.mean(ranges)
 
-    # 校准
     cal = get_calibration(stock)
-    range_mult = cal.get("range_multiplier", 1.0)
-    bias = cal.get("bias_correction", 0.0)
-
-    pred_close = latest.close + bias
-    pred_range = stdev * 0.4 * range_mult
+    pred_close = cur_price + cal.get("bias_correction", 0.0)
+    pred_range = stdev * 0.4 * cal.get("range_multiplier", 1.0)
     pred_low = pred_close - pred_range
     pred_high = pred_close + pred_range
 
-    # 记录
     rid = record_prediction(
         stock_code=stock,
         predicted_low=pred_low,
         predicted_high=pred_high,
         predicted_close=pred_close,
-        current_price=latest.close,
+        current_price=cur_price,
     )
 
-    console.print(f"  昨收: {latest.close:.2f} | 近20日均价: {avg:.2f} | 振幅: {avg_range:.1f}%")
-    console.print(f"  近10日: {ups}阳 {10-ups}阴 | 标准差: {stdev:.2f}")
+    # ====== 输出 ======
+    action_colors = {
+        "strong_buy": "bold green", "buy": "green", "hold": "yellow",
+        "sell": "red", "strong_sell": "bold red",
+    }
+    action_emoji = {
+        "strong_buy": "[STRONG BUY]", "buy": "[BUY]", "hold": "[WAIT]",
+        "sell": "[SELL]", "strong_sell": "[STRONG SELL]",
+    }
+    color = action_colors.get(advice.action, "white")
+    emoji = action_emoji.get(advice.action, "[?]")
+
+    # --- 主面板 ---
+    header = (
+        f"[{color}]{emoji} {advice.action_label}[/{color}]  |  "
+        f"评分: [{color}]{advice.score}/100[/{color}]  |  "
+        f"仓位: [{color}]{advice.position_pct}%[/{color}]  |  "
+        f"置信度: {advice.confidence}"
+    )
+
+    body = f"\n{advice.rationale}\n"
+    body += f"\n[dim]基于 {latest.date} 数据[/dim]"
+
+    panel = Panel(body, title=header, border_style=color, padding=(1, 2))
+    console.print(panel)
+
+    # --- 预测面板 ---
+    cal_info = ""
     if cal["ready"]:
-        console.print(f"  校准: 偏差修正 {cal['bias_correction']:+.2f} | 区间乘数 ×{cal['range_multiplier']} | 基于 {cal['based_on']} 次历史")
+        cal_info = (
+            f"  校准状态: 偏差 {cal['bias_correction']:+.2f}  |  "
+            f"方向准确率 {cal['direction_accuracy']:.0f}%  |  "
+            f"基于 {cal['based_on']} 次历史"
+        )
+
+    pred_table = Table(title="上午收盘预测", border_style="cyan")
+    pred_table.add_column("预测区间", style="cyan", justify="center")
+    pred_table.add_column("最可能", style="bold cyan", justify="center")
+    pred_table.add_column("基准", justify="center")
+    pred_table.add_column("记录ID", justify="center")
+    pred_table.add_row(
+        f"{pred_low:.2f} — {pred_high:.2f} 元",
+        f"{pred_close:.2f} 元",
+        f"{cur_price:.2f} 元",
+        f"#{rid}",
+    )
+    console.print(pred_table)
+    if cal_info:
+        console.print(f"[dim]{cal_info}[/dim]")
+
+    # --- 关键指标摘要 ---
     console.print()
-    console.print(f"  [bold cyan]预测区间: {pred_low:.2f} — {pred_high:.2f} 元[/bold cyan]")
-    console.print(f"  预测收盘: {pred_close:.2f} 元 | 记录 ID: #{rid}")
+    summary = Table(title="关键指标")
+    summary.add_column("估值", style="yellow")
+    summary.add_column("技术", style="blue")
+    summary.add_column("趋势", style="magenta")
+    summary.add_column("近期", style="green")
+    pe_str = f"PE分位 {result.pe_percentile:.0f}%" if result.pe_percentile else "PE N/A"
+    pb_str = f"PB分位 {result.pb_percentile:.0f}%" if result.pb_percentile else "PB N/A"
+    summary.add_row(
+        f"{pe_str}\n{pb_str}",
+        f"RSI {result.rsi_14:.0f}\nMACD {result.macd:.3f}" if result.rsi_14 else "N/A",
+        f"{result.trend}\nMA20>{'MA50' if result.ma_20 and result.ma_50 and result.ma_20 > result.ma_50 else ''}",
+        f"{ups}阳{10-ups}阴\n振幅{avg_range:.1f}%",
+    )
+    console.print(summary)
+
+    # --- 详细 ---
+    if verbose and advice.details:
+        console.print()
+        console.print("[bold]详细分析[/bold]")
+        console.print("─" * 60)
+        for line in advice.details:
+            if line.startswith("==="):
+                console.print(f"\n[bold cyan]{line}[/bold cyan]")
+            elif line:
+                console.print(f"  {line}")
+        console.print("─" * 60)
+
+        bd = score_result.breakdown
+        table = Table(title="评分细项")
+        table.add_column("因子", style="cyan")
+        table.add_column("加权得分", justify="right")
+        table.add_column("原始分", justify="right")
+        table.add_column("权重", justify="right")
+        for name, sv, w in [
+            ("估值", bd.valuation_score, "35%"), ("技术", bd.technical_score, "30%"),
+            ("趋势", bd.trend_score, "20%"), ("量能", bd.volume_score, "10%"),
+            ("情绪", bd.sentiment_score, "5%"),
+        ]:
+            raw = sv / (float(w.strip("%")) / 100)
+            table.add_row(name, f"{sv:.1f}", f"{raw:.0f}", w)
+        table.add_row("[bold]总计[/bold]", f"[bold]{bd.total:.1f}[/bold]", "", "[bold]100%[/bold]")
+        console.print(table)
+
+    console.print()
+    console.print(DISCLAIMER)
     console.print()
 
 
