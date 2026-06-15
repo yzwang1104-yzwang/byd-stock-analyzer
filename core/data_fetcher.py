@@ -174,31 +174,50 @@ def fetch_valuation_data(
 
     result = ValuationData(stock_code=stock_code, data_date=date.today())
 
-    # 1. PE/PB 历史
+    # 1. PE 历史 (百度估值)
     try:
-        logger.info(f"获取 {stock_code} PE/PB 数据...")
-        pe_df = ak.stock_a_pe(symbol=stock_code)
+        logger.info(f"获取 {stock_code} PE(TTM) 数据...")
+        pe_df = ak.stock_zh_valuation_baidu(
+            symbol=stock_code, indicator="市盈率(TTM)", period="近一年"
+        )
         if pe_df is not None and not pe_df.empty:
-            # 列名可能为: 日期, 市盈率, 市净率
-            result.pe_history = pe_df.get("市盈率", pe_df.iloc[:, 1]).dropna().tolist()
-            result.pb_history = pe_df.get("市净率", pe_df.iloc[:, 2]).dropna().tolist()
-            if result.pe_history:
-                result.current_pe = result.pe_history[-1]
-            if result.pb_history:
-                result.current_pb = result.pb_history[-1]
+            # 列: date, value
+            pe_values = pe_df["value"].dropna().tolist()
+            result.pe_history = pe_values
+            if pe_values:
+                result.current_pe = pe_values[-1]
     except Exception as e:
-        logger.warning(f"获取 PE/PB 数据失败: {e}")
+        logger.warning(f"获取 PE 数据失败: {e}")
 
-    # 2. 行业对比
+    # 2. PB 历史 (百度估值)
     try:
-        logger.info(f"获取行业估值数据...")
-        industry_df = ak.stock_a_lg_indicator()
+        logger.info(f"获取 {stock_code} PB 数据...")
+        pb_df = ak.stock_zh_valuation_baidu(
+            symbol=stock_code, indicator="市净率", period="近一年"
+        )
+        if pb_df is not None and not pb_df.empty:
+            pb_values = pb_df["value"].dropna().tolist()
+            result.pb_history = pb_values
+            if pb_values:
+                result.current_pb = pb_values[-1]
+    except Exception as e:
+        logger.warning(f"获取 PB 数据失败: {e}")
+
+    # 3. 行业估值对比 (东方财富)
+    try:
+        logger.info(f"获取行业估值对比...")
+        industry_df = ak.stock_zh_valuation_comparison_em(symbol=stock_code)
         if industry_df is not None and not industry_df.empty:
-            # 查找比亚迪所在行业（汽车制造业）
-            auto_row = industry_df[industry_df.iloc[:, 0].str.contains("汽车", na=False)]
-            if not auto_row.empty:
-                result.industry_pe = float(auto_row.iloc[0, 1])  # PE
-                result.industry_pb = float(auto_row.iloc[0, 2])  # PB
+            # 通常包含: 股票PE, 行业PE, 股票PB, 行业PB 等列
+            cols = industry_df.columns.tolist()
+            for col in cols:
+                if "行业" in col and ("市盈" in col or "PE" in col.upper()):
+                    result.industry_pe = float(industry_df[col].iloc[0])
+                    break
+            for col in cols:
+                if "行业" in col and ("市净" in col or "PB" in col.upper()):
+                    result.industry_pb = float(industry_df[col].iloc[0])
+                    break
     except Exception as e:
         logger.warning(f"获取行业数据失败: {e}")
 
