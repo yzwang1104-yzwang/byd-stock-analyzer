@@ -117,11 +117,10 @@ def _score_technical(result: AnalysisResult) -> float:
         signals += 1
 
     # 布林带: 接近下轨=超卖
-    if result.bollinger_lower is not None and result.bollinger_middle is not None:
-        close = result.bollinger_middle  # 用中轨近似
+    if result.bollinger_lower is not None and result.latest_close is not None:
         band_width = result.bollinger_upper - result.bollinger_lower if result.bollinger_upper else 1
         if band_width > 0:
-            position = (close - result.bollinger_lower) / band_width
+            position = (result.latest_close - result.bollinger_lower) / band_width
             if position < 0.2:
                 score += 15  # 接近下轨
             elif position > 0.8:

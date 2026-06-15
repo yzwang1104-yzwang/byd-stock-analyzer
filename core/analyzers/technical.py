@@ -89,6 +89,10 @@ def analyze(data: NormalizedData) -> AnalysisResult:
         result.warnings.append(f"指标计算异常: {e}")
         result.data_quality = "degraded"
 
+    # 填充最新收盘价（供 scoring.py 布林带位置计算使用）
+    if not df.empty and "close" in df.columns:
+        result.latest_close = float(df["close"].iloc[-1])
+
     return result
 
 

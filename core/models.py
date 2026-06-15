@@ -145,6 +145,9 @@ class AnalysisResult:
     # 趋势判断
     trend: str = "neutral"  # "up", "down", "sideways"
 
+    # 当前价格
+    latest_close: Optional[float] = None
+
     # 元数据
     data_quality: str = "full"  # "full", "degraded", "partial"
     warnings: list[str] = field(default_factory=list)
