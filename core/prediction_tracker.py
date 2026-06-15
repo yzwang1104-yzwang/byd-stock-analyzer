@@ -119,8 +119,12 @@ def get_calibration(stock_code: str) -> dict:
         range_mult = 1.5
     elif in_range < 60:
         range_mult = 1.2
-    elif in_range > 90:
-        range_mult = 0.8  # 区间太宽，收窄
+    elif in_range >= 95:
+        range_mult = 0.5  # 几乎全命中 → 大幅收窄
+    elif in_range >= 85:
+        range_mult = 0.7  # 多数命中 → 适度收窄
+    elif in_range > 70:
+        range_mult = 0.85
 
     return {
         "bias_correction": round(bias * 0.5, 2),  # 只修正一半，避免过调
