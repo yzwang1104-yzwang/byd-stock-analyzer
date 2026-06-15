@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>多股票对比</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{background:#0f172a;color:#e2e8f0;font-family:system-ui}</style></head>
+<body class="p-6"><div class="max-w-5xl mx-auto">
+<a href="/" class="text-cyan-400 text-sm hover:underline mb-4 inline-block">← 返回</a>
+<h1 class="text-xl font-bold mb-4">多股票对比</h1>
+<div class="overflow-x-auto"><table class="w-full text-sm">
+<thead><tr class="text-left text-slate-400 border-b border-slate-700">
+<th class="p-2">代码</th><th class="p-2 text-right">现价</th><th class="p-2 text-right">评分</th><th class="p-2">建议</th><th class="p-2">方向</th><th class="p-2 text-right">市盈率分位</th><th class="p-2 text-right">市净率分位</th><th class="p-2">趋势</th></tr></thead>
+<tbody>
+{% for s in stocks %}
+<tr class="border-b border-slate-800 hover:bg-slate-800">
+<td class="p-2"><a href="/stock/{{ s.code }}/" class="text-cyan-400">{{ s.code }}</a></td>
+<td class="p-2 text-right">{{ s.price|floatformat:2 }}</td>
+<td class="p-2 text-right font-bold {% if s.score >= 70 %}text-green-400{% elif s.score >= 56 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ s.score }}</td>
+<td class="p-2">{{ s.action }}</td>
+<td class="p-2">{{ s.direction }}</td>
+<td class="p-2 text-right">{{ s.pe_pct|floatformat:0 }}%</td>
+<td class="p-2 text-right">{{ s.pb_pct|floatformat:0 }}%</td>
+<td class="p-2">{{ s.trend }}</td></tr>
+{% endfor %}</tbody></table></div>
+<div class="text-center text-xs text-slate-600 mt-6">分析结果仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。</div>
+</div></body></html>

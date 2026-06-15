@@ -1,0 +1,204 @@
+"""Django 视图——薄层，复用 core/ 模块。"""
+
+import io, sys
+import statistics
+import json
+
+from django.shortcuts import render
+
+STOCKS = ["002594", "920839", "600370", "600567"]
+STOCK_NAMES = {"002594": "比亚迪", "920839": "920839", "600370": "600370", "600567": "600567"}
+
+
+def _run_analysis(code: str) -> dict:
+    """运行完整分析流水线，返回上下文 dict。"""
+    old = sys.stdout
+    sys.stdout = io.StringIO()
+    try:
+        from core.data_fetcher import fetch_normalized_data, fetch_valuation_data
+        data = fetch_normalized_data(stock_code=code, force_refresh=False)
+
+        from core.analyzers.technical import analyze as at
+        result = at(data)
+
+        try:
+            valuation = fetch_valuation_data(stock_code=code)
+        except Exception:
+            valuation = None
+        from core.analyzers.valuation import analyze as av
+        result = av(result, valuation)
+
+        from core.scoring import compute as cs
+        sr = cs(result)
+
+        from core.advice import generate as ga
+        advice = ga(sr, result, current_price=data.latest_price)
+
+        from core.market_context import get_market_regime, market_boost
+        market = get_market_regime()
+        advice.score = int(market_boost(advice.score, market))
+        advice.score = min(100, max(0, advice.score))
+
+        from core.buy_timing import calculate_path_to_buy
+        timing = calculate_path_to_buy(
+            advice.score, result.pe_percentile, result.pb_percentile,
+            result.trend, data.latest_price, result.ma_20, result.ma_50
+        )
+
+        from core.prediction_tracker import get_calibration
+        cal = get_calibration(code)
+
+        from core.backtester import predict_direction
+        dp = predict_direction(data.prices)
+    finally:
+        sys.stdout = old
+
+    closes = [p.close for p in data.prices[-100:]]
+    dates = [p.date.isoformat() for p in data.prices[-100:]]
+
+    return {
+        "code": code,
+        "name": STOCK_NAMES.get(code, code),
+        "price": data.latest_price,
+        "score": advice.score,
+        "action": advice.action_label,
+        "action_class": advice.action,
+        "rationale": advice.rationale,
+        "position_pct": advice.position_pct,
+        "confidence": advice.confidence,
+        "pe_pct": result.pe_percentile,
+        "pb_pct": result.pb_percentile,
+        "trend": result.trend,
+        "rsi": result.rsi_14,
+        "macd": result.macd,
+        "ma20": result.ma_20,
+        "ma50": result.ma_50,
+        "boll_upper": result.bollinger_upper,
+        "boll_lower": result.bollinger_lower,
+        "boll_mid": result.bollinger_middle,
+        "atr": result.atr_14,
+        "direction": dp["direction"],
+        "dir_confidence": dp["confidence"],
+        "dir_signals": dp["signals"][:3],
+        "need_pts": timing["need_pts"],
+        "timing_path": timing["paths"][0]["description"][:40] if timing["paths"] else "",
+        "at_buy": timing["at_buy"],
+        "dates": json.dumps(dates),
+        "closes": json.dumps(closes),
+        "ma20_series": json.dumps(_calc_sma(closes, 20)),
+        "ma50_series": json.dumps(_calc_sma(closes, 50)),
+        "boll_upper_series": json.dumps(_calc_boll(closes, 20, 2)[0]),
+        "boll_lower_series": json.dumps(_calc_boll(closes, 20, 2)[2]),
+        "cal_bias": cal.get("bias_correction", 0),
+        "cal_range": cal.get("range_multiplier", 1),
+    }
+
+
+def _calc_sma(values: list, period: int) -> list:
+    result = []
+    for i in range(len(values)):
+        if i < period - 1:
+            result.append(None)
+        else:
+            result.append(round(sum(values[i - period + 1 : i + 1]) / period, 2))
+    return result
+
+
+def _calc_boll(values: list, period: int, std: int) -> tuple:
+    upper, mid, lower = [], [], []
+    for i in range(len(values)):
+        if i < period - 1:
+            upper.append(None); mid.append(None); lower.append(None)
+        else:
+            window = values[i - period + 1 : i + 1]
+            m = sum(window) / period
+            s = statistics.stdev(window)
+            upper.append(round(m + std * s, 2))
+            mid.append(round(m, 2))
+            lower.append(round(m - std * s, 2))
+    return upper, mid, lower
+
+
+# ====== Views ======
+
+def dashboard(request):
+    """仪表盘主页——4只股票一览。"""
+    from core.market_context import get_market_regime
+    market = get_market_regime()
+
+    stocks_data = []
+    for code in STOCKS:
+        try:
+            d = _run_analysis(code)
+        except Exception as e:
+            d = {"code": code, "name": code, "price": 0, "score": 0, "error": str(e)[:50]}
+        stocks_data.append(d)
+
+    from core.position_manager import load_position
+    for d in stocks_data:
+        pos = load_position(d["code"])
+        if pos:
+            pnl = pos.unrealized_pnl(d.get("price", 0))
+            d["has_position"] = True
+            d["pos_shares"] = pos.total_shares
+            d["pos_avg"] = pos.avg_cost
+            d["pos_pnl_pct"] = pnl["pnl_pct"]
+            d["pos_trigger_add"] = pos.can_add and d.get("price", 0) <= pos.next_add_price
+            d["pos_next_add"] = pos.next_add_price
+        else:
+            d["has_position"] = False
+
+    return render(request, "stocks/dashboard.html", {
+        "stocks": stocks_data,
+        "market": market,
+    })
+
+
+def stock_detail(request, code: str):
+    """单只股票详情——K线图 + 完整分析。"""
+    d = _run_analysis(code)
+    return render(request, "stocks/detail.html", {"stock": d})
+
+
+def stock_predict(request, code: str):
+    """HTMX 局部刷新——单只股票的评分+预测。"""
+    d = _run_analysis(code)
+    return render(request, "stocks/_predict_panel.html", {"stock": d})
+
+
+def scan(request):
+    """多股票对比。"""
+    stocks_data = [_run_analysis(c) for c in STOCKS]
+    return render(request, "stocks/scan.html", {"stocks": stocks_data})
+
+
+def positions(request):
+    """持仓管理页面。"""
+    from core.position_manager import load_position
+    pos_list = []
+    for code in STOCKS:
+        pos = load_position(code)
+        if pos:
+            d = _run_analysis(code)
+            pnl = pos.unrealized_pnl(d["price"])
+            pos_list.append({
+                **d,
+                "has_position": True,
+                "pos_shares": pos.total_shares,
+                "pos_avg": pos.avg_cost,
+                "pos_cost": pos.total_cost,
+                "pos_pnl": pnl["pnl"],
+                "pos_pnl_pct": pnl["pnl_pct"],
+                "pos_entries": pos.entries,
+                "pos_next_add": pos.next_add_price,
+                "pos_adds_left": pos.adds_remaining,
+                "pos_trigger_add": pos.can_add and d["price"] <= pos.next_add_price,
+            })
+    total_pnl = sum(p["pos_pnl"] for p in pos_list)
+    total_cost = sum(p["pos_cost"] for p in pos_list)
+    return render(request, "stocks/positions.html", {
+        "positions": pos_list,
+        "total_pnl": total_pnl,
+        "total_cost": total_cost,
+        "total_pnl_pct": (total_pnl / total_cost * 100) if total_cost > 0 else 0,
+    })

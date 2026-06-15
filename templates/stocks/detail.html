@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ stock.name }} {{ stock.code }} — 详细分析</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    .card { background: #1e293b; border-radius: 12px; padding: 1.25rem; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div class="max-w-5xl mx-auto px-4 py-6">
+    <a href="/" class="text-cyan-400 text-sm hover:underline mb-4 inline-block">← 返回仪表盘</a>
+
+    <!-- Header -->
+    <div class="card mb-4">
+      <div class="flex justify-between items-start">
+        <div>
+          <h1 class="text-2xl font-bold">{{ stock.name }} <span class="text-slate-400 text-lg">{{ stock.code }}</span></h1>
+          <div class="text-sm text-slate-400 mt-1">{{ stock.rationale }}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-3xl font-mono">{{ stock.price|floatformat:2 }}</div>
+          <div class="text-lg font-bold {% if stock.score >= 70 %}text-green-400{% elif stock.score >= 56 %}text-yellow-400{% else %}text-red-400{% endif %}">
+            {{ stock.score }}/100 — {{ stock.action }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- K-Line Chart -->
+    <div class="card mb-4">
+      <div id="kline" style="height:400px;"></div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div class="card text-center"><div class="text-xs text-slate-400">市盈率分位</div><div class="text-xl">{{ stock.pe_pct|floatformat:0 }}%</div></div>
+      <div class="card text-center"><div class="text-xs text-slate-400">市净率分位</div><div class="text-xl">{{ stock.pb_pct|floatformat:0 }}%</div></div>
+      <div class="card text-center"><div class="text-xs text-slate-400">RSI(14)</div><div class="text-xl">{{ stock.rsi|floatformat:1 }}</div></div>
+      <div class="card text-center"><div class="text-xs text-slate-400">MACD</div><div class="text-xl">{{ stock.macd|floatformat:3 }}</div></div>
+    </div>
+
+    <!-- Direction + Timing -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div class="card">
+        <div class="text-sm font-semibold mb-2">方向预测</div>
+        <div class="text-lg">{{ stock.direction }} ({{ stock.dir_confidence }}%置信)</div>
+        <div class="text-xs text-slate-500 mt-1">{{ stock.dir_signals|join:" | " }}</div>
+      </div>
+      <div class="card">
+        <div class="text-sm font-semibold mb-2">买入路径</div>
+        {% if stock.at_buy %}
+          <div class="text-green-400 text-lg font-bold">已触发买入</div>
+        {% else %}
+          <div class="text-yellow-400">还需 {{ stock.need_pts }} 分</div>
+          <div class="text-xs text-slate-500 mt-1">{{ stock.timing_path }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="text-center text-xs text-slate-600">
+      分析结果仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。
+    </div>
+  </div>
+
+  <script>
+  var chart = echarts.init(document.getElementById('kline'));
+  chart.setOption({
+    tooltip: { trigger: 'axis' },
+    grid: { left: '8%', right: '2%', top: '5%', bottom: '5%' },
+    xAxis: { type: 'category', data: {{ stock.dates|safe }}, axisLabel: { show: false } },
+    yAxis: { type: 'value', scale: true },
+    series: [
+      { name: '收盘价', type: 'line', data: {{ stock.closes|safe }}, lineStyle: { color: '#22c55e' }, symbol: 'none', smooth: true },
+      { name: 'MA20', type: 'line', data: {{ stock.ma20_series|safe }}, lineStyle: { color: '#eab308' }, symbol: 'none' },
+      { name: 'MA50', type: 'line', data: {{ stock.ma50_series|safe }}, lineStyle: { color: '#3b82f6' }, symbol: 'none' },
+      { name: '布林上轨', type: 'line', data: {{ stock.boll_upper_series|safe }}, lineStyle: { color: '#64748b', type: 'dashed' }, symbol: 'none' },
+      { name: '布林下轨', type: 'line', data: {{ stock.boll_lower_series|safe }}, lineStyle: { color: '#64748b', type: 'dashed' }, symbol: 'none', areaStyle: { color: 'rgba(100,116,139,0.1)' } },
+    ]
+  });
+  </script>
+</body>
+</html>
