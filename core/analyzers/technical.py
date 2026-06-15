@@ -12,6 +12,10 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
+# 抑制 DataFrame 打印
+pd.set_option("display.max_rows", 0)
+pd.set_option("display.max_columns", 0)
+
 from core.config import (
     ATR_PERIOD,
     BOLLINGER_PARAMS,

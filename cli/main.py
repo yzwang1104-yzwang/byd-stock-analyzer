@@ -6,8 +6,22 @@ usage:
     python cli/main.py --price 89.0 --mock     # 使用模拟数据（离线模式）
 """
 
+import io
+import logging
+import os
 import sys
+import warnings
 from datetime import date
+
+# ---- 抑制调试输出 ----
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
+# 重定向 stdout 为 UTF-8（处理 Windows GBK）
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 from typing import Optional
 
 import typer
@@ -62,7 +76,13 @@ def analyze(
     # ---- Phase 3: 技术分析 ----
     from core.analyzers.technical import analyze as analyze_technical
 
-    result = analyze_technical(data)
+    # 抑制 pandas-ta 内部 DataFrame 打印
+    _original_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    try:
+        result = analyze_technical(data)
+    finally:
+        sys.stdout = _original_stdout
 
     # ---- Phase 4: 估值分析 ----
     if not mock:
