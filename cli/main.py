@@ -237,7 +237,8 @@ def predict(
 
     now = datetime.now()
     console.print()
-    console.print(f"[bold]比亚迪 002594 实时分析[/bold]")
+    stock_label = f"{stock} 实时分析" if stock != "002594" else "比亚迪 002594 实时分析"
+    console.print(f"[bold]{stock_label}[/bold]")
     console.print(f"时间: {now.strftime('%Y-%m-%d %H:%M')}")
     console.print()
 
@@ -610,13 +611,97 @@ def backtest(
     console.print(DISCLAIMER)
 
 
+@app.command()
+def scan(
+    stocks: str = typer.Option("002594,920839,600370,600567", "--stocks", help="股票代码列表，逗号分隔"),
+) -> None:
+    """多股票快速扫描——对比评分和方向。"""
+    import io as _io
+
+    codes = [s.strip() for s in stocks.split(",")]
+    results = []
+
+    for code in codes:
+        _saved = sys.stdout
+        sys.stdout = _io.StringIO()
+        try:
+            from core.data_fetcher import fetch_normalized_data, fetch_valuation_data
+            data = fetch_normalized_data(stock_code=code, force_refresh=False)
+            from core.analyzers.technical import analyze as at
+            result = at(data)
+            try:
+                valuation = fetch_valuation_data(stock_code=code)
+            except Exception:
+                valuation = None
+            from core.analyzers.valuation import analyze as av
+            result = av(result, valuation)
+            from core.scoring import compute as cs
+            sr = cs(result)
+            from core.advice import generate as ga
+            advice = ga(sr, result, current_price=data.latest_price)
+            from core.backtester import predict_direction
+            dp = predict_direction(data.prices)
+            status = "OK"
+        except Exception as e:
+            status = str(e)[:40]
+            advice = None
+            dp = None
+        finally:
+            sys.stdout = _saved
+
+        if status == "OK" and advice:
+            results.append({
+                "code": code,
+                "price": data.latest_price,
+                "score": advice.score,
+                "action": advice.action_label,
+                "direction": dp["direction"] if dp else "?",
+                "pe_pct": result.pe_percentile,
+                "pb_pct": result.pb_percentile,
+                "trend": result.trend,
+                "rsi": result.rsi_14,
+            })
+        else:
+            results.append({"code": code, "price": 0, "score": 0, "action": "数据失败", "direction": "?", "pe_pct": None, "pb_pct": None, "trend": "?", "rsi": None, "error": status})
+
+    # 输出
+    table = Table(title="多股票扫描")
+    table.add_column("代码", style="cyan")
+    table.add_column("现价", justify="right")
+    table.add_column("评分", justify="right")
+    table.add_column("建议", justify="center")
+    table.add_column("方向", justify="center")
+    table.add_column("PE分位", justify="right")
+    table.add_column("PB分位", justify="right")
+    table.add_column("趋势", justify="center")
+
+    for r in results:
+        score_color = "green" if r["score"] >= 70 else ("red" if r["score"] < 50 else "yellow")
+        dir_label = {"up": "↑", "down": "↓", "flat": "→"}.get(r["direction"], "?")
+        pe_str = f'{r["pe_pct"]:.0f}%' if r["pe_pct"] else "N/A"
+        pb_str = f'{r["pb_pct"]:.0f}%' if r["pb_pct"] else "N/A"
+        table.add_row(
+            r["code"],
+            f'{r["price"]:.2f}',
+            f'[{score_color}]{r["score"]}[/{score_color}]',
+            r["action"],
+            dir_label,
+            pe_str,
+            pb_str,
+            r["trend"],
+        )
+    console.print(table)
+    console.print()
+    console.print(DISCLAIMER)
+
+
 if __name__ == "__main__":
     # 支持两种调用方式:
     #   python -m cli.main analyze --price 91.0  (typer 子命令)
     #   python -m cli.main --price 91.0           (直接参数, 等同于 analyze)
     import sys as _sys
 
-    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest"):
+    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest", "scan"):
         app()
     else:
         # 默认走 analyze 命令

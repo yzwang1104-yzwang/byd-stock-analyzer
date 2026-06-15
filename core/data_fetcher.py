@@ -55,7 +55,9 @@ def _write_cache_csv(filepath: Path, rows: list[dict], fieldnames: list[str]) ->
 # ====== 东方财富 API ======
 
 def _market_code(stock_code: str) -> str:
-    """0=深圳, 1=上海"""
+    """0=深圳, 1=上海, 0=北交所"""
+    if stock_code.startswith("9"):
+        return "0"  # 北交所归入深市API
     return "0" if stock_code.startswith(("0", "3")) else "1"
 
 
@@ -92,7 +94,13 @@ def fetch_realtime_quote(stock_code: str = STOCK_CODE) -> dict:
 
 def _fetch_tencent_kline(stock_code: str, days: int) -> list[PriceBar]:
     """从腾讯 API 获取历史日K线（前复权）——企业网络环境最稳定。"""
-    prefix = "sz" if stock_code.startswith(("0", "3")) else "sh"
+    # 深圳: sz, 上海: sh, 北交所: bj
+    if stock_code.startswith("9"):
+        prefix = "bj"
+    elif stock_code.startswith(("0", "3")):
+        prefix = "sz"
+    else:
+        prefix = "sh"
     param = f"{prefix}{stock_code},day,,,{days},qfq"
     url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={param}"
 
