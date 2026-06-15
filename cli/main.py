@@ -468,8 +468,8 @@ def predict(
     summary.add_column("技术", style="blue")
     summary.add_column("趋势", style="magenta")
     summary.add_column("近期", style="green")
-    pe_str = f"PE分位 {result.pe_percentile:.0f}% {_valuation_label(result.pe_percentile)}" if result.pe_percentile else "PE N/A"
-    pb_str = f"PB分位 {result.pb_percentile:.0f}% {_valuation_label(result.pb_percentile)}" if result.pb_percentile else "PB N/A"
+    pe_str = f"市盈率分位 {result.pe_percentile:.0f}% {_valuation_label(result.pe_percentile)}" if result.pe_percentile else "市盈率 N/A"
+    pb_str = f"市净率分位 {result.pb_percentile:.0f}% {_valuation_label(result.pb_percentile)}" if result.pb_percentile else "市净率 N/A"
     summary.add_row(
         f"{pe_str}\n{pb_str}",
         f"RSI {result.rsi_14:.0f}\nMACD {result.macd:.3f}" if result.rsi_14 else "N/A",
@@ -683,8 +683,8 @@ def scan(
     table.add_column("评分", justify="right")
     table.add_column("建议", justify="center")
     table.add_column("方向", justify="center")
-    table.add_column("PE分位", justify="right")
-    table.add_column("PB分位", justify="right")
+    table.add_column("市盈率分位", justify="right")
+    table.add_column("市净率分位", justify="right")
     table.add_column("趋势", justify="center")
 
     for r in results:
