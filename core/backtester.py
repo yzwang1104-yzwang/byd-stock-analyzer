@@ -40,7 +40,7 @@ def backtest_direction(
         today = prices[i]
         tomorrow = prices[i + 1]
 
-        pred = _predict_direction(window)
+        pred = predict_direction(window)
         actual = "up" if tomorrow.close > today.close else ("down" if tomorrow.close < today.close else "flat")
 
         results.append({
@@ -102,7 +102,7 @@ def backtest_direction(
     }
 
 
-def _predict_direction(window: list[PriceBar]) -> dict:
+def predict_direction(window: list[PriceBar]) -> dict:
     """基于窗口数据预测次日方向——6指标投票法。
 
     返回: {"direction": "up"|"down"|"flat", "confidence": 0-100, "signals": [...]}
@@ -119,31 +119,18 @@ def _predict_direction(window: list[PriceBar]) -> dict:
 
     current = closes[-1]
 
-    # 1. MACD 简易版: 快线(12) vs 慢线(26)
+    # 1. MACD 柱状图方向（EMA(12) - EMA(26)）
     if len(closes) >= 26:
         ema12 = _ema(closes, 12)
         ema26 = _ema(closes, 26)
         macd = ema12 - ema26
-        signal = _ema([macd], 9) if macd else 0
-
-        # 需要前一天的 MACD
-        ema12_prev = _ema(closes[:-1], 12) if len(closes) > 26 else ema12
-        ema26_prev = _ema(closes[:-1], 26) if len(closes) > 26 else ema26
-        macd_prev = ema12_prev - ema26_prev
-        signal_prev = signal  # 简化
-
-        if macd > signal and macd_prev <= signal_prev:
-            signals.append("MACD金叉 ↑")
-            up_votes += 1
-        elif macd < signal and macd_prev >= signal_prev:
-            signals.append("MACD死叉 ↓")
-            down_votes += 1
-        elif macd > 0:
-            signals.append("MACD正柱 ↑")
-            up_votes += 0.5
-        else:
-            signals.append("MACD负柱 ↓")
-            down_votes += 0.5
+        if macd > 0.3:  # 显著正柱
+            signals.append(f"MACD正柱({macd:.2f}) ↑")
+            up_votes += 0.7
+        elif macd < -0.3:  # 显著负柱
+            signals.append(f"MACD负柱({macd:.2f}) ↓")
+            down_votes += 0.7
+        # -0.3~0.3: 中性，MACD 无方向信号
         total_votes += 1
 
     # 2. RSI(14) — 三级投票：极端(1票) / 偏向(0.5票) / 中性(0票)
@@ -246,11 +233,13 @@ def _predict_direction(window: list[PriceBar]) -> dict:
         # -0.5% ~ +0.5%: 不投票
         total_votes += 1
 
-    # 趋势调整投票权重
-    if trend_bias < 1.0:  # 下跌趋势：降看涨票
-        up_votes *= trend_bias
-    elif trend_bias > 1.0:  # 上涨趋势：增强看涨票
-        up_votes *= trend_bias
+    # 趋势调整投票权重（对称：跌势降看涨+增强看跌，涨势反之）
+    if trend_bias < 1.0:  # 下跌趋势
+        up_votes *= trend_bias      # 降看涨票权重
+        down_votes /= trend_bias    # 增强看跌票权重
+    elif trend_bias > 1.0:  # 上涨趋势
+        up_votes *= trend_bias      # 增强看涨票权重
+        down_votes /= trend_bias    # 降看跌票权重
 
     # 计票
     if total_votes == 0:

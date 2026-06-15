@@ -79,7 +79,11 @@ def compute_accuracy(stock_code: str) -> dict:
     for r in completed:
         pred_change = float(r["predicted_close"]) - float(r["current_price"])
         actual_change = float(r["actual_close"]) - float(r["current_price"])
-        if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0) or (abs(pred_change) < 0.1 and abs(actual_change) < 0.1):
+        if (
+            (pred_change > 0 and actual_change > 0) or
+            (pred_change < 0 and actual_change < 0) or
+            (abs(pred_change) < 0.1 and abs(actual_change) < 0.1 and pred_change * actual_change >= 0)
+        ):
             direction_correct += 1
 
     # 是否在实际区间内

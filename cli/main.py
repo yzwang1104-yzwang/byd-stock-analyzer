@@ -241,37 +241,38 @@ def predict(
     console.print(f"时间: {now.strftime('%Y-%m-%d %H:%M')}")
     console.print()
 
-    # ====== 数据 ======
-    prices = fetch_price_history(stock_code=stock, days=500, force_refresh=True)
-    if not prices:
+    # ====== 统一数据获取（分析 + 预测共用） ======
+    _saved = sys.stdout
+    sys.stdout = _io.StringIO()
+    data = fetch_normalized_data(stock_code=stock, force_refresh=False)
+    sys.stdout = _saved
+
+    if not data.prices:
         console.print("[red]价格数据获取失败[/red]")
         return
-    latest = prices[-1]
-    cur_price = latest.close
+
+    prices = data.prices
+    cur_price = prices[-1].close
 
     # 实时行情
     try:
         rt = fetch_realtime_quote(stock_code=stock)
         rt_price = rt.get("f43", 0) / 100
-        rt_pe = rt.get("f162", 0) / 100
-        rt_mcap = rt.get("f116", 0) / 1e8
         if rt_price > 0:
             cur_price = rt_price
         console.print(
             f"[dim]实时: {rt.get('f57','')} {cur_price:.2f}  |  "
-            f"PE {rt_pe:.1f}  |  市值 {rt_mcap:.0f}亿  |  "
+            f"PE {rt.get('f162',0)/100:.1f}  |  市值 {rt.get('f116',0)/1e8:.0f}亿  |  "
             f"昨收 {rt.get('f60',0)/100:.2f}[/dim]"
         )
     except Exception:
-        pass
+        console.print(f"[dim]价格: {cur_price:.2f} (K线)[/dim]")
 
     console.print()
 
     # ====== 完整分析流水线 ======
-    _saved = sys.stdout
     sys.stdout = _io.StringIO()
     try:
-        data = fetch_normalized_data(stock_code=stock, force_refresh=False)
         from core.analyzers.technical import analyze as analyze_technical
         result = analyze_technical(data)
         try:
@@ -358,7 +359,7 @@ def predict(
     )
 
     body = f"\n{advice.rationale}\n"
-    body += f"\n[dim]基于 {latest.date} 数据[/dim]"
+    body += f"\n[dim]基于 {prices[-1].date} 数据[/dim]"
 
     panel = Panel(body, title=header, border_style=color, padding=(1, 2))
     console.print(panel)
@@ -399,9 +400,9 @@ def predict(
         console.print(f"[dim]预测因子: {' | '.join(factors)} | 区间基于 ATR({result.atr_14:.2f})[/dim]")
 
     # --- 方向预测 + 二维决策 ---
-    from core.backtester import _predict_direction
+    from core.backtester import predict_direction
 
-    dir_pred = _predict_direction(data.prices)
+    dir_pred = predict_direction(data.prices)
     direction = dir_pred["direction"]
     dir_conf = dir_pred["confidence"]
     up_votes = sum(1 for s in dir_pred["signals"] if "↑" in s)
@@ -450,7 +451,7 @@ def predict(
     summary.add_row(
         f"{pe_str}\n{pb_str}",
         f"RSI {result.rsi_14:.0f}\nMACD {result.macd:.3f}" if result.rsi_14 else "N/A",
-        f"{result.trend}\nMA20>{'MA50' if result.ma_20 and result.ma_50 and result.ma_20 > result.ma_50 else ''}",
+        f"{result.trend}\nMA20{' > MA50' if result.ma_20 and result.ma_50 and result.ma_20 > result.ma_50 else ' < MA50' if result.ma_20 and result.ma_50 else ''}",
         f"{ups}阳{10-ups}阴\n振幅{avg_range:.1f}%",
     )
     console.print(summary)
