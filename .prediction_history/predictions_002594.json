@@ -46,5 +46,41 @@
     "confidence": "中",
     "actual_close": 91.11,
     "error": -0.04
+  },
+  {
+    "id": 5,
+    "timestamp": "2026-06-15T10:28:30.828064",
+    "date": "2026-06-15",
+    "predicted_low": 89.94,
+    "predicted_high": 92.19,
+    "predicted_close": 91.07,
+    "current_price": 90.96,
+    "confidence": "中",
+    "actual_close": "",
+    "error": ""
+  },
+  {
+    "id": 6,
+    "timestamp": "2026-06-15T10:30:52.879528",
+    "date": "2026-06-15",
+    "predicted_low": 89.94,
+    "predicted_high": 92.19,
+    "predicted_close": 91.07,
+    "current_price": 90.96,
+    "confidence": "中",
+    "actual_close": "",
+    "error": ""
+  },
+  {
+    "id": 7,
+    "timestamp": "2026-06-15T10:31:08.376780",
+    "date": "2026-06-15",
+    "predicted_low": 89.92,
+    "predicted_high": 92.17,
+    "predicted_close": 91.04,
+    "current_price": 90.94,
+    "confidence": "中",
+    "actual_close": "",
+    "error": ""
   }
 ]

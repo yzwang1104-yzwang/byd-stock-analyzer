@@ -398,6 +398,46 @@ def predict(
     if factors:
         console.print(f"[dim]预测因子: {' | '.join(factors)} | 区间基于 ATR({result.atr_14:.2f})[/dim]")
 
+    # --- 方向预测 + 二维决策 ---
+    from core.backtester import _predict_direction
+
+    dir_pred = _predict_direction(data.prices)
+    direction = dir_pred["direction"]
+    dir_conf = dir_pred["confidence"]
+    up_votes = sum(1 for s in dir_pred["signals"] if "↑" in s)
+    down_votes = sum(1 for s in dir_pred["signals"] if "↓" in s)
+    signals_short = " | ".join(dir_pred["signals"][:3]) if dir_pred["signals"] else "无信号"
+
+    # 二维决策矩阵
+    score = advice.score
+    if score >= 70 and direction == "up":
+        matrix = ("强烈买入", "bold green")
+    elif score >= 70 and direction == "down":
+        matrix = ("等待低吸", "green")
+    elif score >= 50 and direction == "up":
+        matrix = ("轻仓试探", "green")
+    elif score >= 50 and direction == "down":
+        matrix = ("建议卖出", "red")
+    elif score < 50 and direction == "up":
+        matrix = ("观望等待", "yellow")
+    elif score < 50 and direction == "down":
+        matrix = ("强烈卖出", "bold red")
+    else:
+        matrix = ("信号不足", "yellow")
+
+    dir_labels = {"up": "↑ 看涨", "down": "↓ 看跌", "flat": "→ 平盘"}
+    dir_color_styles = {"up": "green", "down": "red", "flat": "yellow"}
+
+    dir_style = dir_color_styles.get(direction, "white")
+    console.print(
+        f"[dim]方向预测: [{dir_style}]{dir_labels.get(direction, '?')}[/{dir_style}] "
+        f"({dir_conf}%置信) | {up_votes}↑{down_votes}↓ | "
+        f"决策: [bold {matrix[1]}]{matrix[0]}[/bold {matrix[1]}] "
+        f"({score}分 × {direction})[/dim]"
+    )
+    if signals_short and signals_short != "无信号":
+        console.print(f"[dim]  信号: {signals_short}[/dim]")
+
     # --- 关键指标摘要 ---
     console.print()
     summary = Table(title="关键指标")
@@ -527,4 +567,13 @@ def backtest(
 
 
 if __name__ == "__main__":
-    app()
+    # 支持两种调用方式:
+    #   python -m cli.main analyze --price 91.0  (typer 子命令)
+    #   python -m cli.main --price 91.0           (直接参数, 等同于 analyze)
+    import sys as _sys
+
+    if len(_sys.argv) > 1 and _sys.argv[1] in ("analyze", "predict", "backfill", "backtest"):
+        app()
+    else:
+        # 默认走 analyze 命令
+        app(["analyze"] + _sys.argv[1:])
