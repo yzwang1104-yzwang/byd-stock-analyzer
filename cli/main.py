@@ -11,7 +11,7 @@ import logging
 import os
 import sys
 import warnings
-from datetime import date
+from datetime import date, datetime
 
 # ---- 抑制调试输出 ----
 warnings.filterwarnings("ignore")
@@ -217,6 +217,87 @@ def _render_output(advice, score_result, analysis, price, verbose):
     console.print()
     console.print(DISCLAIMER)
     console.print()
+
+
+@app.command()
+def predict(
+    stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
+) -> None:
+    """预测今日上午收盘价并记录。"""
+    import io as _io, statistics as _stats
+    from datetime import date as _date
+
+    from core.data_fetcher import fetch_price_history
+    from core.prediction_tracker import compute_accuracy, get_calibration, record_prediction
+
+    console.print(f"[bold]比亚迪 002594 上午收盘预测[/bold]")
+    console.print(f"时间: {datetime.now().strftime('%H:%M:%S')}")
+    console.print()
+
+    # 获取数据
+    prices = fetch_price_history(stock_code=stock, days=30, force_refresh=True)
+
+    if not prices:
+        console.print("[red]数据获取失败[/red]")
+        return
+
+    latest = prices[-1]
+    closes = [p.close for p in prices[-20:]]
+    avg = _stats.mean(closes)
+    stdev = _stats.stdev(closes)
+    ups = sum(1 for p in prices[-10:] if p.close > p.open)
+    ranges = [(p.high - p.low) / p.open * 100 for p in prices[-10:]]
+    avg_range = _stats.mean(ranges)
+
+    # 校准
+    cal = get_calibration(stock)
+    range_mult = cal.get("range_multiplier", 1.0)
+    bias = cal.get("bias_correction", 0.0)
+
+    pred_close = latest.close + bias
+    pred_range = stdev * 0.4 * range_mult
+    pred_low = pred_close - pred_range
+    pred_high = pred_close + pred_range
+
+    # 记录
+    rid = record_prediction(
+        stock_code=stock,
+        predicted_low=pred_low,
+        predicted_high=pred_high,
+        predicted_close=pred_close,
+        current_price=latest.close,
+    )
+
+    console.print(f"  昨收: {latest.close:.2f} | 近20日均价: {avg:.2f} | 振幅: {avg_range:.1f}%")
+    console.print(f"  近10日: {ups}阳 {10-ups}阴 | 标准差: {stdev:.2f}")
+    if cal["ready"]:
+        console.print(f"  校准: 偏差修正 {cal['bias_correction']:+.2f} | 区间乘数 ×{cal['range_multiplier']} | 基于 {cal['based_on']} 次历史")
+    console.print()
+    console.print(f"  [bold cyan]预测区间: {pred_low:.2f} — {pred_high:.2f} 元[/bold cyan]")
+    console.print(f"  预测收盘: {pred_close:.2f} 元 | 记录 ID: #{rid}")
+    console.print()
+
+
+@app.command()
+def backfill(
+    price: float = typer.Option(..., "--price", "-p", help="实际收盘价"),
+    stock: str = typer.Option("002594", "--stock", "-s", help="股票代码"),
+) -> None:
+    """回填实际收盘价，计算预测误差。"""
+    from core.prediction_tracker import backfill_actual, compute_accuracy
+
+    n = backfill_actual(stock_code=stock, actual_price=price)
+    console.print(f"[green]已回填 {n} 条预测记录，实际价 {price:.2f}[/green]")
+
+    stats = compute_accuracy(stock)
+    if stats["status"] == "ok":
+        console.print()
+        console.print(f"[bold]预测准确率报告[/bold] ({stats['count']} 次已完成)")
+        console.print(f"  平均绝对误差: {stats['mae']} 元")
+        console.print(f"  均方根误差:   {stats['rmse']} 元")
+        console.print(f"  平均偏差:     {stats['mean_bias']:+.2f} 元 (正=预测偏低)")
+        console.print(f"  方向准确率:   {stats['direction_accuracy']:.0f}%")
+        console.print(f"  区间命中率:   {stats['in_range_pct']:.0f}%")
 
 
 if __name__ == "__main__":
