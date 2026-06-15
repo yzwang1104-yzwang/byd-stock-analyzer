@@ -133,7 +133,7 @@ def _generate_rationale(
     # 估值
     if analysis.pe_percentile is not None:
         level = "低位" if analysis.pe_percentile < 30 else ("高位" if analysis.pe_percentile > 70 else "中位")
-        parts.append(f"市盈率处于历史{level}")
+        parts.append(f"市盈率(PE)处于历史{level}")
     if analysis.vs_industry_pe:
         parts.append(f"{analysis.vs_industry_pe}行业均值")
 
@@ -192,7 +192,7 @@ def _generate_details(
         details.append(f"ATR(14): {analysis.atr_14}  (日均波幅约 {analysis.atr_14 / analysis.bollinger_middle * 100:.1f}%)" if analysis.bollinger_middle else f"ATR(14): {analysis.atr_14}")
     details.append("")
     details.append("=== 估值 ===")
-    details.append(f"市盈率分位: {analysis.pe_percentile or 'N/A'}%  |  市净率分位: {analysis.pb_percentile or 'N/A'}%")
+    details.append(f"市盈率(PE)分位: {analysis.pe_percentile or 'N/A'}%  |  市净率(PB)分位: {analysis.pb_percentile or 'N/A'}%")
     if analysis.vs_industry_pe:
         details.append(f"vs 行业PE: {analysis.vs_industry_pe}")
     details.append("")

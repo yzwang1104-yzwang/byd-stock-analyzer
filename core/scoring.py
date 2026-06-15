@@ -204,7 +204,7 @@ def _collect_buy_signals(result: AnalysisResult) -> list[str]:
     if result.trend in ("up", "sideways_up"):
         signals.append(f"趋势向好: {result.trend}")
     if result.pe_percentile is not None and result.pe_percentile < 30:
-        signals.append(f"市盈率处于历史低位 ({result.pe_percentile:.0f}分位)")
+        signals.append(f"市盈率(PE)处于历史低位 ({result.pe_percentile:.0f}分位)")
     return signals
 
 
@@ -217,5 +217,5 @@ def _collect_sell_signals(result: AnalysisResult) -> list[str]:
     if result.trend in ("down", "sideways_down"):
         signals.append(f"趋势走弱: {result.trend}")
     if result.pe_percentile is not None and result.pe_percentile > SELL_PE_PERCENTILE:
-        signals.append(f"市盈率处于历史高位 ({result.pe_percentile:.0f}分位)")
+        signals.append(f"市盈率(PE)处于历史高位 ({result.pe_percentile:.0f}分位)")
     return signals
