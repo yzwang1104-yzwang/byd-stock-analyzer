@@ -11,10 +11,13 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
+import warnings as _w
 
-# 抑制 DataFrame 打印
+# 抑制 DataFrame 打印 + pandas-ta 警告
 pd.set_option("display.max_rows", 0)
 pd.set_option("display.max_columns", 0)
+_w.filterwarnings("ignore", category=FutureWarning)
+_w.filterwarnings("ignore", message=".*pandas_ta.*")
 
 from core.config import (
     ATR_PERIOD,
@@ -160,7 +163,7 @@ def _compute_macd(result: AnalysisResult, df: pd.DataFrame) -> None:
                     result.warnings.append("MACD 金叉信号")
                 elif prev_macd >= prev_signal and curr_macd < curr_signal:
                     result.warnings.append("MACD 死叉信号")
-    except Exception as e:
+    except (Exception, IndexError) as e:
         logger.warning(f"MACD 计算失败: {e}")
 
 
