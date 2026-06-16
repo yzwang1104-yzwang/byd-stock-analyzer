@@ -255,15 +255,20 @@ def print_summary(result: dict) -> None:
     # 异常检测
     anomalies = []
     if f["score"] >= 80:
-        anomalies.append(f"⚠️ 评分≥80——触发买入红色警报！")
+        anomalies.append(f"买入红色警报: 评分≥80——建议立即加仓！")
     if f["score"] <= 30:
-        anomalies.append(f"⚠️ 评分≤30——触发强烈卖出警报！")
-    if c.get("status") == "ok" and c.get("direction_accuracy", 100) < 30:
-        anomalies.append(f"⚠️ 方向准确率<30%——模型可能需要调优")
+        anomalies.append(f"强烈卖出警报: 评分≤30——建议清仓！")
+    # 方向准确率: 短期方向~48%是天花板（市场有效假说），仅当>50样本且<20%才告警
+    n_backfilled = c.get("count", 0)
+    dir_acc = c.get("direction_accuracy", 50)
+    if n_backfilled >= 50 and dir_acc < 20:
+        anomalies.append(f"方向准确率异常低: {dir_acc}%（{n_backfilled}样本），可能模型退化")
+    elif n_backfilled >= 30 and dir_acc < 10:
+        anomalies.append(f"方向准确率严重退化: {dir_acc}%（{n_backfilled}样本）")
     if f["pe_pct"] is not None and f["pe_pct"] > 90:
-        anomalies.append(f"⚠️ PE分位>90%——极度高估")
+        anomalies.append(f"PE分位>90%——极度高估")
     if f["pe_pct"] is not None and f["pe_pct"] < 10:
-        anomalies.append(f"⚠️ PE分位<10%——极度低估，历史级机会")
+        anomalies.append(f"PE分位<10%——极度低估，历史级买入机会")
 
     if anomalies:
         print(f"\n[异常] 发现 {len(anomalies)} 个异常，需要 Claude 分析:")

@@ -497,6 +497,13 @@ def predict(
         f"决策: [bold {matrix[1]}]{matrix[0]}[/bold {matrix[1]}] "
         f"({score}分 × {direction})[/dim]"
     )
+    # 方向准确率可靠性提示
+    dir_acc = cal.get("direction_accuracy", 50)
+    if dir_acc < 35 and cal.get("based_on", 0) >= 10:
+        console.print(
+            f"[dim]  ⓘ 方向预测历史准确率仅{dir_acc:.0f}%（短期方向接近随机），"
+            f"建议以买入评分为主、方向为辅助参考[/dim]"
+        )
     if signals_short and signals_short != "无信号":
         console.print(f"[dim]  信号: {signals_short}[/dim]")
 
