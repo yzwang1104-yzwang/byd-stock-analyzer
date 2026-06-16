@@ -33,28 +33,78 @@ def get_market_regime() -> dict:
 
     closes = [p.close for p in sh_index]
 
-    # 趋势: MA20 vs MA50
+    # 均线方向
     ma20 = sum(closes[-20:]) / 20
     ma50 = sum(closes[-50:]) / 50 if len(closes) >= 50 else ma20
-    trend_score = 50
-    if ma20 > ma50 * 1.02:
-        regime = "bull"
-        trend_score = 75
-    elif ma20 < ma50 * 0.98:
-        regime = "bear"
-        trend_score = 25
-    else:
-        regime = "sideways"
+
+    # 今日涨跌
+    today_change = (closes[-1] - closes[-2]) / closes[-2] * 100 if len(closes) >= 2 else 0
+
+    # 近期动量
+    momentum_5d = (closes[-1] - closes[-6]) / closes[-6] * 100 if len(closes) >= 6 else 0
+    momentum_10d = (closes[-1] - closes[-11]) / closes[-11] * 100 if len(closes) >= 11 else 0
 
     # RSI(14)
     rsi = _simple_rsi(closes, 14)
 
-    # 近期动量
-    momentum_5d = (closes[-1] - closes[-6]) / closes[-6] * 100 if len(closes) >= 6 else 0
-
     # 近10日涨跌比
     ups = sum(1 for i in range(-10, 0) if closes[i] > closes[i - 1])
     up_ratio = ups / 10 * 100
+
+    # === 多因子判定市场状态 ===
+    bear_score = 0  # 越高越熊
+    bull_score = 0  # 越高越牛
+
+    # 因子1: 均线结构 (MA20 vs MA50) — 权重最高
+    if ma20 > ma50 * 1.01:
+        bull_score += 3
+    elif ma20 < ma50 * 0.99:
+        bear_score += 3
+
+    # 因子2: 今日涨跌 — 用户最直观感受，且当日趋势最有预测力
+    if today_change > 0.8:
+        bull_score += 4
+    elif today_change > 0.3:
+        bull_score += 2
+    elif today_change < -0.8:
+        bear_score += 4
+    elif today_change < -0.3:
+        bear_score += 2
+
+    # 因子3: 短期动量 (5日) — 阈值提高避免与今日冲突时压倒今日
+    if momentum_5d > 3:
+        bull_score += 2
+    elif momentum_5d < -3:
+        bear_score += 2
+
+    # 因子4: 中期动量 (10日)
+    if momentum_10d > 4:
+        bull_score += 1
+    elif momentum_10d < -4:
+        bear_score += 1
+
+    # 因子5: RSI
+    if rsi > 60:
+        bull_score += 1
+    elif rsi < 40:
+        bear_score += 1
+
+    # 因子6: 涨跌比
+    if up_ratio > 65:
+        bull_score += 1
+    elif up_ratio < 35:
+        bear_score += 1
+
+    # 判定（2分差距即可判定方向，更敏感）
+    if bull_score >= bear_score + 2:
+        regime = "bull"
+        trend_score = min(100, 50 + (bull_score - bear_score) * 8)
+    elif bear_score >= bull_score + 2:
+        regime = "bear"
+        trend_score = max(0, 50 - (bear_score - bull_score) * 8)
+    else:
+        regime = "sideways"
+        trend_score = 50
 
     return {
         "regime": regime,
