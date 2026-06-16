@@ -172,13 +172,14 @@ def step8_backtest(stock: str = "002594", days: int = 50) -> dict:
 
 
 def run() -> dict:
-    """执行完整的自动化步骤 (1-3 + 8-9)，返回摘要。"""
+    """执行自动化步骤 2-9（步骤1由外部 predict 命令完成）。"""
     result = {
         "timestamp": datetime.now().isoformat(),
         "steps": {},
     }
 
-    # 步骤1: 抓行情
+    # 步骤1已由外部 python -m cli.main predict 完成
+    # 这里做内部数据收集供步骤2-3使用
     predict_result = step1_fetch("002594")
     result["steps"]["1_fetch"] = predict_result
 
