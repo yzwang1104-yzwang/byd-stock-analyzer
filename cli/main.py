@@ -38,13 +38,27 @@ console = Console()
 def _valuation_label(pct: float | None) -> str:
     """PE/PB 分位 → 解释标签。≤30%=便宜, 30-70%=合理, >70%=偏贵"""
     if pct is None:
-        return "N/A"
+        return "暂无"
     if pct <= 30:
         return "偏低(便宜)"
     elif pct <= 70:
         return "合理(中性)"
     else:
         return "偏高(贵)"
+
+
+def _trend_label(trend: str | None) -> str:
+    """趋势英文值 → 中文标签。"""
+    trend_map = {
+        "up": "上升",
+        "down": "下跌",
+        "sideways": "震荡",
+        "sideways_up": "震荡偏多",
+        "sideways_down": "震荡偏空",
+        "unknown": "未知",
+        None: "未知",
+    }
+    return trend_map.get(trend or "unknown", "未知")
 
 
 DISCLAIMER = (
@@ -493,12 +507,12 @@ def predict(
     summary.add_column("技术", style="blue")
     summary.add_column("趋势", style="magenta")
     summary.add_column("近期", style="green")
-    pe_str = f"市盈率(PE)分位 {result.pe_percentile:.0f}% {_valuation_label(result.pe_percentile)}" if result.pe_percentile else "市盈率(PE) N/A"
-    pb_str = f"市净率(PB)分位 {result.pb_percentile:.0f}% {_valuation_label(result.pb_percentile)}" if result.pb_percentile else "市净率(PB) N/A"
+    pe_str = f"市盈率(PE)分位 {result.pe_percentile:.0f}% {_valuation_label(result.pe_percentile)}" if result.pe_percentile is not None else "市盈率(PE) 暂无"
+    pb_str = f"市净率(PB)分位 {result.pb_percentile:.0f}% {_valuation_label(result.pb_percentile)}" if result.pb_percentile is not None else "市净率(PB) 暂无"
     summary.add_row(
         f"{pe_str}\n{pb_str}",
-        f"RSI {result.rsi_14:.0f}\nMACD {result.macd:.3f}" if result.rsi_14 else "N/A",
-        f"{result.trend}\nMA20{' > MA50' if result.ma_20 and result.ma_50 and result.ma_20 > result.ma_50 else ' < MA50' if result.ma_20 and result.ma_50 else ''}",
+        f"RSI {result.rsi_14:.0f}\nMACD {result.macd:.3f}" if result.rsi_14 else "暂无",
+        f"{_trend_label(result.trend)}\nMA20{' > MA50' if result.ma_20 and result.ma_50 and result.ma_20 > result.ma_50 else ' < MA50' if result.ma_20 and result.ma_50 else ''}",
         f"{ups}阳{10-ups}阴\n振幅{avg_range:.1f}%",
     )
     console.print(summary)
@@ -748,12 +762,15 @@ def backtest(
     # 最近5条样本
     console.print()
     console.print("[bold]最近5条预测样本[/bold]")
+    _dir_cn = {"up": "涨", "down": "跌", "flat": "平"}
     for r in result["sample_results"]:
         mark = "[green]✓[/green]" if r["correct"] else "[red]✗[/red]"
         conf_str = f"({r['confidence']}%)"
+        pred_cn = _dir_cn.get(r["predicted"], r["predicted"])
+        actual_cn = _dir_cn.get(r["actual"], r["actual"])
         console.print(
             f"  {mark} {r['date']} {r['close']:.2f} | "
-            f"预测: {r['predicted']} {conf_str} | 实际: {r['actual']}"
+            f"预测: {pred_cn} {conf_str} | 实际: {actual_cn}"
         )
         console.print(f"    [dim]信号: {' | '.join(r['signals'][:3])}[/dim]")
 
@@ -808,7 +825,7 @@ def scan(
                 "direction": dp["direction"] if dp else "?",
                 "pe_pct": result.pe_percentile,
                 "pb_pct": result.pb_percentile,
-                "trend": result.trend,
+                "trend": _trend_label(result.trend),
                 "rsi": result.rsi_14,
             })
         else:
@@ -828,8 +845,8 @@ def scan(
     for r in results:
         score_color = "green" if r["score"] >= 70 else ("red" if r["score"] < 50 else "yellow")
         dir_label = {"up": "↑", "down": "↓", "flat": "→"}.get(r["direction"], "?")
-        pe_str = f'{r["pe_pct"]:.0f}% {_valuation_label(r["pe_pct"])}' if r["pe_pct"] else "N/A"
-        pb_str = f'{r["pb_pct"]:.0f}% {_valuation_label(r["pb_pct"])}' if r["pb_pct"] else "N/A"
+        pe_str = f'{r["pe_pct"]:.0f}% {_valuation_label(r["pe_pct"])}' if r["pe_pct"] is not None else "暂无"
+        pb_str = f'{r["pb_pct"]:.0f}% {_valuation_label(r["pb_pct"])}' if r["pb_pct"] is not None else "暂无"
         table.add_row(
             r["code"],
             f'{r["price"]:.2f}',

@@ -202,9 +202,11 @@ def _collect_buy_signals(result: AnalysisResult) -> list[str]:
         if any(kw in w for kw in ["金叉", "超卖", "下轨", "向好"]):
             signals.append(w)
     if result.trend in ("up", "sideways_up"):
-        signals.append(f"趋势向好: {result.trend}")
+        signals.append(f"趋势向好（{_trend_cn(result.trend)}）")
     if result.pe_percentile is not None and result.pe_percentile < 30:
-        signals.append(f"市盈率(PE)处于历史低位 ({result.pe_percentile:.0f}分位)")
+        signals.append(f"市盈率(PE)处于历史低位（{result.pe_percentile:.0f}分位）")
+    if result.pb_percentile is not None and result.pb_percentile < 30:
+        signals.append(f"市净率(PB)处于历史低位（{result.pb_percentile:.0f}分位）")
     return signals
 
 
@@ -215,7 +217,20 @@ def _collect_sell_signals(result: AnalysisResult) -> list[str]:
         if any(kw in w for kw in ["死叉", "超买", "上轨"]):
             signals.append(w)
     if result.trend in ("down", "sideways_down"):
-        signals.append(f"趋势走弱: {result.trend}")
+        signals.append(f"趋势走弱（{_trend_cn(result.trend)}）")
     if result.pe_percentile is not None and result.pe_percentile > SELL_PE_PERCENTILE:
-        signals.append(f"市盈率(PE)处于历史高位 ({result.pe_percentile:.0f}分位)")
+        signals.append(f"市盈率(PE)处于历史高位（{result.pe_percentile:.0f}分位）")
     return signals
+
+
+def _trend_cn(trend: str | None) -> str:
+    """趋势英文值 → 中文标签。"""
+    trend_map = {
+        "up": "上升",
+        "down": "下跌",
+        "sideways": "震荡",
+        "sideways_up": "震荡偏多",
+        "sideways_down": "震荡偏空",
+        "unknown": "未知",
+    }
+    return trend_map.get(trend or "unknown", "未知")

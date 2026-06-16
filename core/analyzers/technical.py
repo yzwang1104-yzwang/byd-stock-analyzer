@@ -3,7 +3,9 @@
 设计原则:
 - NormalizedData 输入 → AnalysisResult 输出（纯函数，无副作用）
 - 所有指标使用 shift(1) 防止前瞻偏差
-- pandas-ta 作为主计算引擎，无 TA-Lib 硬依赖
+- 使用 pandas-ta 函数式调用（ta.rsi(series)），而非 df.ta 访问器
+  （df.ta 访问器在数据不足时返回原始 DataFrame，导致浮点数转换失败）
+- 所有指标计算带 talib=False（本环境未安装 TA-Lib）
 """
 
 import logging
@@ -11,6 +13,7 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
+import pandas_ta as ta
 import warnings as _w
 
 # 抑制 DataFrame 打印 + pandas-ta 警告
@@ -65,21 +68,32 @@ def analyze(data: NormalizedData) -> AnalysisResult:
     # 关键：shift(1) 防止前瞻偏差——T 日的信号不使用 T 日的数据
     df_safe = df.shift(1)
 
+    n_rows = len(df_safe)
+    enough = n_rows >= 50
+    minimal = n_rows >= 14
+
+    if not minimal:
+        result.warnings.append(f"数据不足（仅 {n_rows} 条），大多数技术指标无法计算")
+
     try:
         # 1. 移动均线
         _compute_ma(result, df_safe)
 
         # 2. MACD
-        _compute_macd(result, df_safe)
+        if enough:
+            _compute_macd(result, df_safe)
 
         # 3. RSI
-        _compute_rsi(result, df_safe)
+        if minimal:
+            _compute_rsi(result, df_safe)
 
         # 4. 布林带
-        _compute_bollinger(result, df_safe)
+        if enough:
+            _compute_bollinger(result, df_safe)
 
         # 5. ATR
-        _compute_atr(result, df_safe)
+        if minimal:
+            _compute_atr(result, df_safe)
 
         # 6. 成交量均线
         _compute_volume(result, df_safe)
@@ -132,95 +146,128 @@ def _compute_ma(result: AnalysisResult, df: pd.DataFrame) -> None:
 
 
 def _compute_macd(result: AnalysisResult, df: pd.DataFrame) -> None:
-    """计算 MACD 并检测金叉/死叉。"""
-    import pandas_ta as ta
-
+    """计算 MACD 并检测金叉/死叉（函数式调用，talib=False）。"""
     try:
-        macd_df = df.ta.macd(
+        close = df["close"].astype(float)
+        macd_df = ta.macd(
+            close,
             fast=MACD_PARAMS["fast"],
             slow=MACD_PARAMS["slow"],
             signal=MACD_PARAMS["signal"],
-            append=False,
+            talib=False,
         )
-        # pandas-ta 返回: MACD_12_26_9, MACDs_12_26_9, MACDh_12_26_9
-        if macd_df is not None and not macd_df.empty:
-            col_macd = [c for c in macd_df.columns if c.startswith("MACD_") and not c.endswith("s_") and not c.endswith("h_")][0]
-            col_signal = [c for c in macd_df.columns if c.startswith("MACDs_")][0]
-            col_hist = [c for c in macd_df.columns if c.startswith("MACDh_")][0]
+        if macd_df is None or macd_df.empty:
+            return
 
-            result.macd = round(float(macd_df[col_macd].iloc[-1]), 4)
-            result.macd_signal = round(float(macd_df[col_signal].iloc[-1]), 4)
-            result.macd_histogram = round(float(macd_df[col_hist].iloc[-1]), 4)
+        # pandas-ta 函数式调用返回: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
+        col_macd = [c for c in macd_df.columns if c.startswith("MACD_") and "s" not in c.split("_")[-1] and "h" not in c.split("_")[-1]]
+        col_signal = [c for c in macd_df.columns if "MACDs" in c]
+        col_hist = [c for c in macd_df.columns if "MACDh" in c]
 
-            # 金叉/死叉检测
-            if len(macd_df) >= 2:
-                prev_macd = macd_df[col_macd].iloc[-2]
-                prev_signal = macd_df[col_signal].iloc[-2]
-                curr_macd = macd_df[col_macd].iloc[-1]
-                curr_signal = macd_df[col_signal].iloc[-1]
+        if not (col_macd and col_signal and col_hist):
+            return
 
-                if prev_macd <= prev_signal and curr_macd > curr_signal:
-                    result.warnings.append("MACD 金叉信号")
-                elif prev_macd >= prev_signal and curr_macd < curr_signal:
-                    result.warnings.append("MACD 死叉信号")
+        val_macd = macd_df[col_macd[0]].dropna()
+        val_signal = macd_df[col_signal[0]].dropna()
+        val_hist = macd_df[col_hist[0]].dropna()
+
+        if len(val_macd) < 1:
+            return
+
+        result.macd = round(float(val_macd.iloc[-1]), 4)
+        result.macd_signal = round(float(val_signal.iloc[-1]), 4)
+        result.macd_histogram = round(float(val_hist.iloc[-1]), 4)
+
+        # 金叉/死叉检测
+        if len(val_macd) >= 2 and len(val_signal) >= 2:
+            prev_macd = val_macd.iloc[-2]
+            prev_signal = val_signal.iloc[-2]
+            curr_macd = val_macd.iloc[-1]
+            curr_signal = val_signal.iloc[-1]
+
+            if prev_macd <= prev_signal and curr_macd > curr_signal:
+                result.warnings.append("MACD 金叉信号")
+            elif prev_macd >= prev_signal and curr_macd < curr_signal:
+                result.warnings.append("MACD 死叉信号")
     except (Exception, IndexError) as e:
         logger.warning(f"MACD 计算失败: {e}")
 
 
 def _compute_rsi(result: AnalysisResult, df: pd.DataFrame) -> None:
-    """计算 RSI(14) 并判断超买超卖。"""
-    import pandas_ta as ta
-
+    """计算 RSI(14) 并判断超买超卖（函数式调用，talib=False）。"""
     try:
-        rsi = df.ta.rsi(length=RSI_PERIOD, append=False)
-        if rsi is not None and not rsi.empty:
-            result.rsi_14 = round(float(rsi.iloc[-1]), 2)
+        close = df["close"].astype(float)
+        rsi = ta.rsi(close, length=RSI_PERIOD, talib=False)
+        if rsi is None or rsi.empty:
+            return
+        val = rsi.dropna()
+        if len(val) < 1:
+            return
+        result.rsi_14 = round(float(val.iloc[-1]), 2)
 
-            if result.rsi_14 <= RSI_OVERSOLD:
-                result.warnings.append(f"RSI 超卖 ({result.rsi_14})")
-            elif result.rsi_14 >= RSI_OVERBOUGHT:
-                result.warnings.append(f"RSI 超买 ({result.rsi_14})")
+        if result.rsi_14 <= RSI_OVERSOLD:
+            result.warnings.append(f"RSI 超卖 ({result.rsi_14})")
+        elif result.rsi_14 >= RSI_OVERBOUGHT:
+            result.warnings.append(f"RSI 超买 ({result.rsi_14})")
     except Exception as e:
         logger.warning(f"RSI 计算失败: {e}")
 
 
 def _compute_bollinger(result: AnalysisResult, df: pd.DataFrame) -> None:
-    """计算布林带(20,2)。"""
-    import pandas_ta as ta
-
+    """计算布林带(20,2)（函数式调用，talib=False）。"""
     try:
-        bb = df.ta.bbands(
+        close = df["close"].astype(float)
+        bb = ta.bbands(
+            close,
             length=BOLLINGER_PARAMS["period"],
             std=BOLLINGER_PARAMS["std_dev"],
-            append=False,
+            talib=False,
         )
-        if bb is not None and not bb.empty:
-            col_upper = [c for c in bb.columns if c.startswith("BBU_")][0]
-            col_mid = [c for c in bb.columns if c.startswith("BBM_")][0]
-            col_lower = [c for c in bb.columns if c.startswith("BBL_")][0]
+        if bb is None or bb.empty:
+            return
 
-            result.bollinger_upper = round(float(bb[col_upper].iloc[-1]), 2)
-            result.bollinger_middle = round(float(bb[col_mid].iloc[-1]), 2)
-            result.bollinger_lower = round(float(bb[col_lower].iloc[-1]), 2)
+        # 函数式调用返回列名含浮点精度: BBL_20_2.0_2.0, BBM_20_2.0_2.0, BBU_20_2.0_2.0...
+        col_upper = [c for c in bb.columns if c.startswith("BBU_")]
+        col_mid = [c for c in bb.columns if c.startswith("BBM_")]
+        col_lower = [c for c in bb.columns if c.startswith("BBL_")]
 
-            # 价格位置判断
-            close = df["close"].iloc[-1]
-            if close <= result.bollinger_lower:
-                result.warnings.append("价格触及布林带下轨——可能超卖")
-            elif close >= result.bollinger_upper:
-                result.warnings.append("价格触及布林带上轨——可能超买")
+        if not (col_upper and col_mid and col_lower):
+            return
+
+        up = bb[col_upper[0]].dropna()
+        mid = bb[col_mid[0]].dropna()
+        low = bb[col_lower[0]].dropna()
+
+        if len(up) < 1:
+            return
+
+        result.bollinger_upper = round(float(up.iloc[-1]), 2)
+        result.bollinger_middle = round(float(mid.iloc[-1]), 2)
+        result.bollinger_lower = round(float(low.iloc[-1]), 2)
+
+        # 价格位置判断
+        close_val = df["close"].iloc[-1]
+        if close_val <= result.bollinger_lower:
+            result.warnings.append("价格触及布林带下轨——可能超卖")
+        elif close_val >= result.bollinger_upper:
+            result.warnings.append("价格触及布林带上轨——可能超买")
     except Exception as e:
         logger.warning(f"布林带计算失败: {e}")
 
 
 def _compute_atr(result: AnalysisResult, df: pd.DataFrame) -> None:
-    """计算 ATR(14)——波动率指标。"""
-    import pandas_ta as ta
-
+    """计算 ATR(14)——波动率指标（函数式调用，talib=False）。"""
     try:
-        atr = df.ta.atr(length=ATR_PERIOD, append=False)
-        if atr is not None and not atr.empty:
-            result.atr_14 = round(float(atr.iloc[-1]), 2)
+        high = df["high"].astype(float)
+        low = df["low"].astype(float)
+        close = df["close"].astype(float)
+        atr = ta.atr(high, low, close, length=ATR_PERIOD, talib=False)
+        if atr is None or atr.empty:
+            return
+        val = atr.dropna()
+        if len(val) < 1:
+            return
+        result.atr_14 = round(float(val.iloc[-1]), 2)
     except Exception as e:
         logger.warning(f"ATR 计算失败: {e}")
 

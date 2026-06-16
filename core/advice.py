@@ -135,7 +135,7 @@ def _generate_rationale(
         level = "低位" if analysis.pe_percentile < 30 else ("高位" if analysis.pe_percentile > 70 else "中位")
         parts.append(f"市盈率(PE)处于历史{level}")
     if analysis.vs_industry_pe:
-        parts.append(f"{analysis.vs_industry_pe}行业均值")
+        parts.append(f"PE{analysis.vs_industry_pe}行业均值")
 
     # 技术面
     if analysis.rsi_14 is not None:
@@ -181,7 +181,9 @@ def _generate_details(
     details.append("")
     details.append("=== 技术指标 ===")
     if analysis.ma_20:
-        details.append(f"MA20:  {analysis.ma_20}  |  MA50: {analysis.ma_50 or 'N/A'}  |  MA200: {analysis.ma_200 or 'N/A'}")
+        ma50_str = f"{analysis.ma_50}" if analysis.ma_50 is not None else "暂无"
+        ma200_str = f"{analysis.ma_200}" if analysis.ma_200 is not None else "暂无"
+        details.append(f"MA20:  {analysis.ma_20}  |  MA50: {ma50_str}  |  MA200: {ma200_str}")
     if analysis.rsi_14:
         details.append(f"RSI(14): {analysis.rsi_14}  {'(超卖)' if analysis.rsi_14 <= 30 else '(超买)' if analysis.rsi_14 >= 70 else ''}")
     if analysis.macd is not None:
@@ -192,9 +194,11 @@ def _generate_details(
         details.append(f"ATR(14): {analysis.atr_14}  (日均波幅约 {analysis.atr_14 / analysis.bollinger_middle * 100:.1f}%)" if analysis.bollinger_middle else f"ATR(14): {analysis.atr_14}")
     details.append("")
     details.append("=== 估值 ===")
-    details.append(f"市盈率(PE)分位: {analysis.pe_percentile or 'N/A'}%  |  市净率(PB)分位: {analysis.pb_percentile or 'N/A'}%")
+    pe_str = f"{analysis.pe_percentile:.2f}%" if analysis.pe_percentile is not None else "暂无"
+    pb_str = f"{analysis.pb_percentile:.2f}%" if analysis.pb_percentile is not None else "暂无"
+    details.append(f"市盈率(PE)分位: {pe_str}  |  市净率(PB)分位: {pb_str}")
     if analysis.vs_industry_pe:
-        details.append(f"vs 行业PE: {analysis.vs_industry_pe}")
+        details.append(f"行业PE对比: {analysis.vs_industry_pe}")
     details.append("")
     details.append("=== 信号 ===")
     if score_result.buy_signals:
