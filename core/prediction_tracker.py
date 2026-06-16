@@ -39,22 +39,24 @@ def record_prediction(
         "predicted_close": round(predicted_close, 2),
         "current_price": round(current_price, 2),
         "confidence": confidence,
-        "actual_close": "",  # 后续回填
-        "error": "",         # 后续回填
+        "actual_close": "",       # 后续回填
+        "error": "",              # 后续回填
+        "backfill_type": "",      # "auto"=30分钟自动, "manual"=手动回填
     })
 
     _save_records(stock_code, records)
     return record_id
 
 
-def backfill_actual(stock_code: str, actual_price: float) -> int:
-    """回填实际收盘价，更新最新一条未回填的记录。"""
+def backfill_actual(stock_code: str, actual_price: float, fill_type: str = "manual") -> int:
+    """回填实际收盘价，更新未回填记录。fill_type: 'auto'或'manual'。"""
     records = _load_records(stock_code)
     count = 0
     for r in records:
         if not r["actual_close"]:
             r["actual_close"] = round(actual_price, 2)
             r["error"] = round(actual_price - float(r["predicted_close"]), 2)
+            r["backfill_type"] = fill_type
             count += 1
     if count:
         _save_records(stock_code, records)
@@ -64,43 +66,63 @@ def backfill_actual(stock_code: str, actual_price: float) -> int:
 # ====== 校准分析 ======
 
 def compute_accuracy(stock_code: str) -> dict:
-    """计算预测准确率和偏差统计。"""
+    """计算预测准确率和偏差统计。自动过滤极端异常值。"""
     records = _load_records(stock_code)
-    completed = [r for r in records if r["actual_close"]]
+    completed = [r for r in records if r.get("actual_close")]
 
     if len(completed) < 3:
         return {"status": "insufficient_data", "count": len(completed)}
 
-    errors = [float(r["error"]) for r in completed]
+    # 过滤极端异常值（偏差 > 5元，明显是数据损坏）
+    valid = [r for r in completed if abs(float(r["error"])) < 5.0]
+    filtered_count = len(completed) - len(valid)
+
+    errors = [float(r["error"]) for r in valid]
     abs_errors = [abs(e) for e in errors]
 
-    # 方向准确率（预测涨跌方向是否正确）
+    # 方向准确率——只统计有意义波动（排除<0.15元噪声）
     direction_correct = 0
-    for r in completed:
+    direction_total = 0
+    for r in valid:
         pred_change = float(r["predicted_close"]) - float(r["current_price"])
         actual_change = float(r["actual_close"]) - float(r["current_price"])
-        if (
-            (pred_change > 0 and actual_change > 0) or
-            (pred_change < 0 and actual_change < 0) or
-            (abs(pred_change) < 0.1 and abs(actual_change) < 0.1 and pred_change * actual_change >= 0)
-        ):
-            direction_correct += 1
+        # 只统计预测或实际有明显波动的记录
+        if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
+            direction_total += 1
+            if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
+                direction_correct += 1
 
-    # 是否在实际区间内
+    # 手动回填的方向准确率（更可靠）
+    manual = [r for r in valid if r.get("backfill_type") == "manual"]
+    manual_dir_correct = 0
+    manual_dir_total = 0
+    for r in manual:
+        pred_change = float(r["predicted_close"]) - float(r["current_price"])
+        actual_change = float(r["actual_close"]) - float(r["current_price"])
+        if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
+            manual_dir_total += 1
+            if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
+                manual_dir_correct += 1
+
+    # 区间命中
     in_range = sum(
-        1 for r in completed
+        1 for r in valid
         if float(r["predicted_low"]) <= float(r["actual_close"]) <= float(r["predicted_high"])
     )
 
     return {
         "status": "ok",
-        "count": len(completed),
+        "count": len(valid),
         "total_predictions": len(records),
-        "mae": round(statistics.mean(abs_errors), 2),          # 平均绝对误差
+        "filtered_outliers": filtered_count,
+        "mae": round(statistics.mean(abs_errors), 2),
         "rmse": round(statistics.mean([e**2 for e in errors])**0.5, 2),
-        "mean_bias": round(statistics.mean(errors), 2),        # 正=预测偏低, 负=预测偏高
-        "direction_accuracy": round(direction_correct / len(completed) * 100, 1),
-        "in_range_pct": round(in_range / len(completed) * 100, 1),
+        "mean_bias": round(statistics.mean(errors), 2),
+        "direction_accuracy": round(direction_correct / max(direction_total, 1) * 100, 1),
+        "direction_total": direction_total,
+        "manual_direction_accuracy": round(manual_dir_correct / max(manual_dir_total, 1) * 100, 1) if manual_dir_total >= 3 else None,
+        "manual_direction_total": manual_dir_total,
+        "in_range_pct": round(in_range / len(valid) * 100, 1),
     }
 
 

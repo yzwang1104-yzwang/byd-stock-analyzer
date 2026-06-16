@@ -152,6 +152,7 @@ def step2_backfill(stock: str, current_price: float) -> int:
         if now - ts > timedelta(minutes=30):
             r["actual_close"] = round(current_price, 2)
             r["error"] = round(current_price - float(r["predicted_close"]), 2)
+            r["backfill_type"] = "auto"
             backfilled += 1
     if backfilled:
         RECORDS_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2))
