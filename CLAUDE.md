@@ -428,6 +428,9 @@ Key routing rules:
 | 06-16 | 数据回填 | 全部 15 条待回填记录一次性回填，59次完成，MAE 0.99元 |
 | 06-16 | 预测曲线 | 实现 cli/chart.py：概率分布曲线 + 下午预测 + 置信区间 |
 | 06-16 | 准确率优化 | 动量钳制+MA缩放+RSI分档+区间扩宽→目标命中率95% |
+| 06-16 | 大盘判定修复 | 6因子投票替代固定MA阈值——用户发现震荡误判→修正为熊市 |
+| 06-16 | 全网情报 | 搜索BYD+大盘下跌原因：Q1利润-55%、政策退坡、汇兑损失、五角大楼黑名单 |
+| 06-16 | 14:30追踪 | 建立5分钟频次14:30目标监控：预测→回写→比对→修正闭环 |
 
 ### 关键决策
 
@@ -460,6 +463,9 @@ Key routing rules:
 | 预测存在极端异常值（#32 偏差5元） | 动量钳制 ATR×1.5 + 安全钳 ±ATR×3 |
 | 区间命中 88% 低于 95% 目标 | 扩宽基础区间 ATR×0.6→0.8 + 校准目标调至95% |
 | MA/RSI 修正为固定值，不响应偏离程度 | 改为按偏离比例缩放（MA±0.5, RSI分4档） |
+| 大盘判定"震荡"实际在跌（用户纠正） | 6因子投票（今日/均线/动量/RSI/涨跌比）替代2%阈值 |
+| 实时API偶发空返回 | 回退K线缓存价，增加容错 |
+| 全网下跌原因不明 | 搜索10+来源：利润-55%、政策退坡、汇兑、五角大楼黑名单 |
 
 ### 技术架构（最终形态）
 
@@ -709,12 +715,12 @@ faa9672b  交易日 10:37/14:37 600370 仓位监控
 
 | 维度 | 数据 |
 |------|------|
-| 总 Commits | 49 |
+| 总 Commits | 50 |
 | Phase 覆盖 | 11/13 (Phase 11 Django完成) |
 | Python 模块 | 20 个 (+cli/improvement_loop.py +cli/chart.py) |
 | Django 页面 | 5 个路由 |
-| 定时任务 | 6 个运行中（持久化） |
-| 预测回填 | 59 条 | MAE 0.99元 | 区间命中 88% |
+| 定时任务 | 7 个运行中（持久化） |
+| 预测回填 | 69 条 | MAE 0.88元 | 区间命中 90% |
 | 支持股票 | 4 只 (002594/920839/600370/600567) |
 | 数据源 | 腾讯K线 + 东方财富实时 + 百度PE/PB |
 | 安全评分 | 9.5/10 | QA 90/100 |
@@ -742,7 +748,19 @@ PE 82%分位(偏高) PB 1%分位(极便宜) → 分歧大，不建议买入
 
 **6个Cron + 预测优化v2上线**
 
-**最后更新:** 2026-06-16 11:15 CST
+**最后更新:** 2026-06-16 13:41 CST
+
+### 今日 Commits (7个)
+
+```
+7e95d2d docs: update CLAUDE.md — accuracy optimization, chart, 59 backfills
+6be5563 fix: market regime detection — 6-factor voting replaces rigid MA threshold
+88b011a perf: optimize prediction accuracy — target 95% range hit rate
+343df81 docs: 06-16 full session record — timeline, fixes, lessons learned
+22e452c fix(10-step): calibrate anomaly thresholds + direction reliability hint
+6429096 docs: update CLAUDE.md — 06-16 fixes, current state, 6 crons
+ade2c51 fix: technical indicators + Chinese labels + 10-step improvement loop
+```
 
 ### 下一步
 
