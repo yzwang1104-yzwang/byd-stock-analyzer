@@ -334,37 +334,47 @@ def predict(
     ranges = [(p.high - p.low) / p.open * 100 for p in prices[-10:]]
     avg_range = _stats.mean(ranges)
 
-    # 近期动量（3日涨跌幅加权）
+    # 近期动量（3日涨跌幅加权），钳制在 ±ATR 范围内
     momentum = 0.0
     if len(prices) >= 4:
-        momentum = (
+        raw_momentum = (
             (prices[-1].close - prices[-2].close) * 0.5 +
             (prices[-2].close - prices[-3].close) * 0.3 +
             (prices[-3].close - prices[-4].close) * 0.2
         )
+        # 钳制：动量不超过 ATR 的 1.5 倍，防止异常值
+        max_move = (result.atr_14 or stdev) * 1.5
+        momentum = max(-max_move, min(max_move, raw_momentum))
 
-    # ATR 波动率预测区间
-    atr_range = result.atr_14 * 0.6 if result.atr_14 else stdev * 0.4
+    # ATR 波动率预测区间（基础宽度，后续校准会调整）
+    base_atr_range = result.atr_14 * 0.8 if result.atr_14 else stdev * 0.5
 
-    # MA 位置修正
+    # MA 位置修正（按偏离 MA 的比例缩放，而非固定值）
     ma_bias = 0.0
     if result.ma_20 and result.ma_50:
-        if cur_price > result.ma_20:
-            ma_bias = -0.1  # 高于MA20，均值回归向下
-        elif cur_price < result.ma_50:
-            ma_bias = +0.1  # 低于MA50，均值回归向上
+        gap_pct = (result.ma_50 - cur_price) / cur_price if cur_price > 0 else 0
+        # 偏离 MA50 越远，回归拉力越强（最大 ±0.5元）
+        ma_bias = max(-0.5, min(0.5, gap_pct * cur_price * 0.3))
 
-    # RSI 极端修正
+    # RSI 极端修正（按偏离程度缩放）
     rsi_bias = 0.0
     if result.rsi_14:
-        if result.rsi_14 < 30:
-            rsi_bias = +0.3  # 超卖，反弹概率大
-        elif result.rsi_14 > 70:
-            rsi_bias = -0.3  # 超买，回调概率大
+        if result.rsi_14 <= 25:
+            rsi_bias = +0.5  # 深度超卖，强反弹
+        elif result.rsi_14 <= 35:
+            rsi_bias = +0.2  # 轻度超卖
+        elif result.rsi_14 >= 75:
+            rsi_bias = -0.5  # 深度超买，强回调
+        elif result.rsi_14 >= 65:
+            rsi_bias = -0.2  # 轻度超买
 
     cal = get_calibration(stock)
     pred_close = cur_price + momentum * 0.3 + ma_bias + rsi_bias + cal.get("bias_correction", 0.0)
-    pred_range = atr_range * cal.get("range_multiplier", 1.0) * mkt_mult
+    pred_range = base_atr_range * cal.get("range_multiplier", 1.0) * mkt_mult
+
+    # 安全钳制：预测价不能偏离现价超过 ATR×3
+    max_deviation = (result.atr_14 or stdev) * 3
+    pred_close = max(cur_price - max_deviation, min(cur_price + max_deviation, pred_close))
     pred_low = pred_close - pred_range
     pred_high = pred_close + pred_range
 

@@ -146,33 +146,33 @@ def get_calibration(stock_code: str) -> dict:
         else:
             break
 
-    # 区间收窄
+    # 区间宽度自适应（目标：95%命中率）
     in_range = stats["in_range_pct"]
     range_mult = 1.0
-    if in_range < 40:
-        range_mult = 1.5
-    elif in_range < 60:
-        range_mult = 1.2
-    elif in_range >= 98:
-        range_mult = 0.35  # 几乎完美 → 激进收窄
+    if in_range < 70:
+        range_mult = 1.5  # 命中太低：大幅扩宽
+    elif in_range < 80:
+        range_mult = 1.3
+    elif in_range < 88:
+        range_mult = 1.15  # 接近目标，微调
+    elif in_range < 93:
+        range_mult = 1.05  # 接近95%，保持
+    elif in_range >= 99:
+        range_mult = 0.85  # 接近完美，适度收窄
+    elif in_range >= 97:
+        range_mult = 0.90
     elif in_range >= 95:
-        range_mult = 0.50
-    elif in_range >= 90:
-        range_mult = 0.65
-    elif in_range >= 85:
-        range_mult = 0.75
-    elif in_range > 70:
-        range_mult = 0.85
+        range_mult = 0.95  # 达标，保守收窄
+    else:
+        range_mult = 1.0
 
-    # 连续命中奖励（更激进）
-    if consecutive >= 15:
-        range_mult *= 0.55
-    elif consecutive >= 10:
-        range_mult *= 0.70
-    elif consecutive >= 5:
-        range_mult *= 0.80
-    elif consecutive >= 3:
+    # 连续命中奖励（仅当命中率已达标时适度收窄）
+    if in_range >= 95 and consecutive >= 10:
         range_mult *= 0.90
+    elif in_range >= 95 and consecutive >= 5:
+        range_mult *= 0.95
+    elif in_range >= 90 and consecutive >= 15:
+        range_mult *= 0.85  # 长期连续命中才收窄
 
     return {
         "bias_correction": round(bias * correction_strength, 2),
