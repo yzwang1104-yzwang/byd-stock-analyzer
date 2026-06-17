@@ -86,9 +86,9 @@ def compute_accuracy(stock_code: str) -> dict:
     errors = [float(r["error"]) for r in valid]
     abs_errors = [abs(e) for e in errors]
 
-    # 方向准确率——排除 auto-backfill（用盘中价代替收盘价会污染方向判断）
-    # auto-backfill 的 actual_close 不是真实收盘价，不能用于方向统计
-    dir_records = [r for r in valid if r.get("backfill_type") != "auto"]
+    # 方向准确率——只统计明确标记为 manual 的记录
+    # auto-backfill 和无标记(旧数据)的 actual_close 可能不是真实收盘价
+    dir_records = [r for r in valid if r.get("backfill_type") == "manual"]
     direction_correct = 0
     direction_total = 0
     for r in dir_records:

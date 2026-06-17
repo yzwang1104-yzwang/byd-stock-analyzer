@@ -253,10 +253,11 @@ def print_summary(result: dict) -> None:
         anomalies.append(f"强烈卖出警报: 评分<=30——建议清仓!")
     n_backfilled = c.get("count", 0)
     dir_acc = c.get("direction_accuracy", 50)
-    if n_backfilled >= 50 and dir_acc < 20:
-        anomalies.append(f"方向准确率异常低: {dir_acc}%（{n_backfilled}样本），可能模型退化")
-    elif n_backfilled >= 30 and dir_acc < 10:
-        anomalies.append(f"方向准确率严重退化: {dir_acc}%（{n_backfilled}样本）")
+    dir_samples = c.get("direction_total", 0)
+    # 仅当方向样本>=30且准确率<20%才告警（小样本不告警）
+    # 方向准确率天花板~48%（市场有效假说），低样本不具统计意义
+    if dir_samples >= 30 and dir_acc < 20:
+        anomalies.append(f"方向准确率异常低: {dir_acc}%（{dir_samples}样本），可能模型退化")
     if f["pe_pct"] is not None and f["pe_pct"] > 90:
         anomalies.append(f"PE分位>90%——极度高估")
     if f["pe_pct"] is not None and f["pe_pct"] < 10:
