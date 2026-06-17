@@ -141,7 +141,7 @@ def get_calibration(stock_code: str) -> dict:
 
     # 中位数偏差 + 指数加权（排除异常值）
     records = _load_records(stock_code)
-    filled = [r for r in records if r["actual_close"] and abs(float(r["error"])) < 5.0]
+    filled = [r for r in records if r.get("actual_close") and abs(float(r.get("error", 0))) < 5.0]
     if len(filled) >= 3:
         import statistics as _st
         # 中位数偏差——比均值更稳健（不受极端值影响）

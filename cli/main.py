@@ -550,7 +550,7 @@ def _auto_backfill(stock: str, current_price: float) -> None:
     now = _dt.now()
     backfilled = 0
     for r in records:
-        if r["actual_close"]:
+        if r.get("actual_close"):
             continue
         try:
             ts = _dt.fromisoformat(r["timestamp"])
