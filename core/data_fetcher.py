@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 # 股票代码别名映射 — 用户习惯代码 → 实际市场代码
 CODE_ALIASES: dict[str, str] = {
-    "920830": "920839",  # 万通液压（用户习惯用 920830）
 }
 
 # 北交所新旧代码映射 — 旧代码 → 新代码
