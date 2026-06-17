@@ -859,3 +859,105 @@ python cli/backup.py --restore   # 从最新备份恢复所有关键文件
 # 备份位置: .claude/backups/YYYY-MM-DD/
 # 触发时间: 交易日 15:05 自动执行
 ```
+
+---
+
+## 十一、2026-06-17 会话记录
+
+### 时间线
+
+| 时间 | 事件 |
+|------|------|
+| 08:00 | 会话启动 — 发现 cron 任务只剩2个，git reset 丢了代码 |
+| 08:10 | 恢复并重建 9 个定时任务 |
+| 08:15 | 扩展至 100 只股票（新增 19 只） |
+| 08:17 | 4股 dashboard 扫描 |
+| 08:20 | TOP10 买入推荐：伊利#1(96分)、上汽#2(91分)、片仔癀#3(86分) |
+| 08:30 | 添加 10:25/14:25 600104 监控 + 9:15 开盘启动任务 |
+| 08:37 | 预测大盘：熊市(牛0:熊4)，今天↑ 80%置信 |
+| 09:00 | Brainstorming: 系统稳定性方案 A+B |
+| 09:15 | writing-plans → subagent-driven-development 执行5个task |
+| 09:30 | Task 1: CLAUDE.md 新增稳定性约定 ✅ |
+| 09:32 | Task 2: startup_check.py 启动检查 ✅ |
+| 09:33 | Task 3: backup.py 备份守护 ✅ |
+| 09:34 | Task 4: 15:05 收盘备份 cron ✅ |
+| 09:36 | Task 5: 端到端验证 ✅ → stable-2026-06-17 tag |
+| 10:00 | TDD-1: 修复方向准确率污染 → auto-backfill 排除 ✅ |
+| 10:15 | TDD-2: backup.py 5个测试 ✅ |
+| 10:20 | TDD-3: startup_check.py 10个测试 ✅ |
+| 10:22 | 11步循环恢复正常，方向准确率异常消失 |
+| 10:24 | 全部验证: 18 tests PASS, 10 cron 在线 |
+| 10:26 | 定时任务全量执行 |
+| 10:27 | 大盘预测 — 熊市，今日↑80% |
+| 10:30 | 实时行情修复 — 腾讯 qt.gtimg.cn 替代东方财富 |
+| 10:33 | 4股 dashboard 扫描 |
+| 10:39 | 比亚迪 87.52(-2.4%) vs 上汽 10.50(-1.4%) |
+| 10:40 | 600104 上汽买入100股 @10.52 记录 |
+| 10:45 | 600370 10日补仓预测 → 最佳 6/29 @1.48 |
+| 10:55 | 600370 预测存档 + 验证 cron |
+| 11:19 | 600370 仓位监控 → 评分37, 持仓亏37.8% |
+| 13:18 | 午盘 dashboard — 比亚迪87.12(-2.8%), 上汽10.54 |
+| 13:21 | 方向准确率彻底修复 — 仅manual记录计入 |
+| 13:26 | 上证指数 4088 → 下午预测 4104(+16点) |
+| 13:55 | 全量定时任务 + 备份 → 正常 |
+| 13:58 | 持仓快照存档 #1 (2120投→1716值→-404亏) |
+
+### 今日 Commits (14个)
+
+```
+29dde53 feat: Shanghai Index afternoon prediction archive + backfill script
+6673072 fix: tighten direction accuracy to manual-only + sample-size-aware threshold
+af18192 fix: KeyError on timestamp — .get() for mixed record types
+5973506 fix: KeyError on actual_close — .get() for mixed record types
+2cffa13 feat: 600370 10-day prediction archive + verification cron
+ab3770a fix: add Tencent real-time quote API — Tencent qt.gtimg.cn
+5cd4455 test: add TDD tests — prediction, backup, startup (18 tests)
+c3e9f84 fix: exclude auto-backfill from direction accuracy
+8caff65 chore: stable-2026-06-17 — stability system live
+9a3c6d8 feat: auto-backup daemon — daily snapshot + restore
+934677f feat: session startup check script — 4-point health check
+03f9ea2 feat: stability conventions — Git discipline + session checklist
+```
+
+### 系统变更
+
+| 变更 | 说明 |
+|------|------|
+| 股票池 | 81→100只 (新增19只) |
+| Cron | 9→11个 |
+| 测试 | 0→18个 |
+| 稳定性 | 新增 Git纪律 + 自动备份 + 启动检查 |
+| 实时行情 | 新增腾讯 qt.gtimg.cn (东方财富被拦截) |
+| 方向准确率 | 修复污染 — 仅manual记录计入 |
+| 代码行数 | +800+ 行 |
+
+### 当前持仓
+
+| 股票 | 股数 | 成本 | 现价 | 市值 | 盈亏 |
+|------|:--:|------|:--:|:--:|:--:|
+| 600104 上汽 | 100 | 10.52 | 10.52 | 1,052 | +0 |
+| 600370 \*ST三房 | 400 | 2.67 | 1.66 | 664 | -404 |
+| **合计** | — | — | — | **1,716** | **-404** |
+
+### 当前分析 (2026-06-17 14:00)
+
+```
+比亚迪 87.06 | 评分 43/SELL | PE 81%贵 PB 0%便宜 | 不建议
+上汽集团 10.52 | 评分 64/WAIT | PE 0% PB 1% RSI 16 | 已建仓100股
+*ST三房 1.66 | 评分 37/SELL | PE 89% | 持仓亏37.8%
+山鹰国际 1.35 | 评分 40/SELL | PE 90% | 观望
+
+上证 4088 | 下午预测 4104(+16点) | 5↑0↓
+大盘熊市 | 113次预测 MAE 0.37 命中91%
+11个Cron在线 | 18 tests PASS | backup正常
+启动检查 4/4 🟢 | stable-2026-06-17 ✅
+```
+
+### 待办
+
+- [ ] 收盘后回填上证预测: `python cli/backfill_sh.py --close <指数>`
+- [ ] 盘后验证 600370 预测
+- [ ] 区间命中率从 91% → 98%
+- [ ] git push 同步远程
+
+**最后更新:** 2026-06-17 14:00 CST
