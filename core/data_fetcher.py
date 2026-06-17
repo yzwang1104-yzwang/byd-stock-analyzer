@@ -20,6 +20,28 @@ from core.models import NormalizedData, PriceBar, ValuationData
 
 logger = logging.getLogger(__name__)
 
+# 股票代码别名映射 — 用户习惯代码 → 实际市场代码
+CODE_ALIASES: dict[str, str] = {
+    "920830": "920839",  # 万通液压（用户习惯用 920830）
+}
+
+# 北交所新旧代码映射 — 旧代码 → 新代码
+BSE_OLD_TO_NEW: dict[str, str] = {
+    "830839": "920839",  # 万通液压
+    # 可继续添加更多映射
+}
+BSE_NEW_TO_OLD: dict[str, str] = {v: k for k, v in BSE_OLD_TO_NEW.items()}
+
+
+def _normalize_code(stock_code: str) -> str:
+    """标准化股票代码——解析别名，返回真实代码。"""
+    return CODE_ALIASES.get(stock_code, stock_code)
+
+
+def _get_bse_old_code(stock_code: str) -> str | None:
+    """获取北交所股票对应的旧代码（新三板时期），用于获取历史数据。"""
+    return BSE_NEW_TO_OLD.get(stock_code)
+
 
 # ====== 缓存工具 ======
 
@@ -77,6 +99,7 @@ def fetch_realtime_quote(stock_code: str = STOCK_CODE) -> dict:
       f47: 成交量  f48: 成交额
       f57: 股票名称  f162: PE(静态)  f116: 总市值
     """
+    stock_code = _normalize_code(stock_code)
     # 数据源1：腾讯实时行情（企业网络环境最稳定）
     try:
         return _fetch_tencent_realtime(stock_code)
@@ -176,9 +199,9 @@ def _http_get_raw(url: str, timeout: int = 10) -> str | None:
 
 def _fetch_tencent_kline(stock_code: str, days: int) -> list[PriceBar]:
     """从腾讯 API 获取历史日K线（前复权）——企业网络环境最稳定。"""
-    # 深圳: sz, 上海: sh, 北交所: bj
-    if stock_code.startswith("9"):
-        prefix = "bj"
+    # 深圳: sz, 上海: sh, 北交所/新三板: nq（K线API用nq前缀）
+    if stock_code.startswith(("9", "8")):
+        prefix = "nq"
     elif stock_code.startswith(("0", "3")):
         prefix = "sz"
     else:
@@ -191,7 +214,7 @@ def _fetch_tencent_kline(stock_code: str, days: int) -> list[PriceBar]:
     klines = stock_data.get("qfqday") or stock_data.get("day")
 
     if not klines:
-        raise RuntimeError(f"腾讯 K 线数据为空: {stock_code}")
+        raise RuntimeError(f"腾讯 K 线数据为空: {prefix}{stock_code}")
 
     bars = []
     for row in klines:
@@ -257,6 +280,7 @@ def fetch_price_history(
 
     优先腾讯 API（企业网络最稳定），东方财富备用。
     """
+    stock_code = _normalize_code(stock_code)
     cache_file = _cache_path(f"prices_{stock_code}.csv")
 
     if not force_refresh and _is_cache_fresh(cache_file):
@@ -300,6 +324,7 @@ def fetch_valuation_data(
     force_refresh: bool = False,
 ) -> ValuationData:
     """获取 PE/PB 历史数据（百度估值 API，通过 AkShare）。"""
+    stock_code = _normalize_code(stock_code)
     cache_file = _cache_path(f"valuation_{stock_code}.csv")
 
     if not force_refresh and _is_cache_fresh(cache_file):
@@ -373,6 +398,7 @@ def fetch_normalized_data(
     force_refresh: bool = False,
 ) -> NormalizedData:
     """一站式数据获取——价格 + 实时行情，归一化为 NormalizedData。"""
+    stock_code = _normalize_code(stock_code)
     prices = fetch_price_history(stock_code=stock_code, force_refresh=force_refresh)
     is_cached = not force_refresh and _is_cache_fresh(_cache_path(f"prices_{stock_code}.csv"))
 
