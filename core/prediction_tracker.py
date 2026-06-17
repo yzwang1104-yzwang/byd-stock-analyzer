@@ -86,19 +86,20 @@ def compute_accuracy(stock_code: str) -> dict:
     errors = [float(r["error"]) for r in valid]
     abs_errors = [abs(e) for e in errors]
 
-    # 方向准确率——只统计有意义波动（排除<0.15元噪声）
+    # 方向准确率——排除 auto-backfill（用盘中价代替收盘价会污染方向判断）
+    # auto-backfill 的 actual_close 不是真实收盘价，不能用于方向统计
+    dir_records = [r for r in valid if r.get("backfill_type") != "auto"]
     direction_correct = 0
     direction_total = 0
-    for r in valid:
+    for r in dir_records:
         pred_change = float(r["predicted_close"]) - float(r["current_price"])
         actual_change = float(r["actual_close"]) - float(r["current_price"])
-        # 只统计预测或实际有明显波动的记录
         if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
             direction_total += 1
             if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
                 direction_correct += 1
 
-    # 手动回填的方向准确率（更可靠）
+    # 手动回填的方向准确率（纯真实收盘价，最可靠）
     manual = [r for r in valid if r.get("backfill_type") == "manual"]
     manual_dir_correct = 0
     manual_dir_total = 0
