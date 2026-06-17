@@ -825,3 +825,37 @@ ade2c51 fix: technical indicators + Chinese labels + 10-step improvement loop
 3. **自动回填会污染方向准确率**（用当前价代替收盘价），以回测为准
 4. **10步循环的价值不在自动化**——在于让 Claude 在异常时介入分析
 5. **600370 是价值陷阱风险**——PE 90%分位说明利润恶化，不是越跌越买
+
+---
+
+## 十、系统稳定性约定（2026-06-17 生效）
+
+### Git 纪律
+
+| 类型 | 规则 |
+|------|------|
+| 🚫 禁止 | `git reset --hard`（除非用户明确说"覆盖本地"） |
+| 🚫 禁止 | `git clean -fd`（同上） |
+| 🚫 禁止 | 覆盖 CLAUDE.md 已有内容（只追加，不替换已有章节） |
+| 🚫 禁止 | 删除 `.claude/` 目录下的任何文件 |
+| ✅ 必须 | 每次代码改动后 `git commit` |
+| ✅ 必须 | 每次会话结束前 `git push` |
+| ✅ 必须 | 每天打 `stable-YYYY-MM-DD` tag |
+| ✅ 必须 | CLAUDE.md 改动视为代码改动，必须 commit |
+| ✅ 必须 | cron 任务清单同步写入 `memory/cron-tasks-*.md` |
+
+### 会话启动检查清单
+
+每次对话开始时自动执行（`python cli/startup_check.py`）：
+1. `git status` — 未提交改动告警
+2. `CronList` — 定时任务是否都在
+3. `.position_history/` — 持仓文件完整性
+4. CLAUDE.md 版本 — 最后更新时间戳
+
+### 备份恢复
+
+```bash
+python cli/backup.py --restore   # 从最新备份恢复所有关键文件
+# 备份位置: .claude/backups/YYYY-MM-DD/
+# 触发时间: 交易日 15:05 自动执行
+```
