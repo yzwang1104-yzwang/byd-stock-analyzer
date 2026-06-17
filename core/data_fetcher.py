@@ -69,16 +69,21 @@ def _http_get(url: str, timeout: int = 15) -> dict:
 
 
 def fetch_realtime_quote(stock_code: str = STOCK_CODE) -> dict:
-    """获取实时行情。
+    """获取实时行情（腾讯优先，东方财富备用）。
 
-    返回字段:
+    返回字段（与东方财富格式兼容）:
       f43: 当前价（×100）  f60: 昨收（×100）
       f44: 最高  f45: 最低  f46: 开盘
       f47: 成交量  f48: 成交额
-      f51: 52周最高  f52: 52周最低
-      f162: PE(静态)  f167: PE(动态)
-      f116: 总市值  f117: 流通市值
+      f57: 股票名称  f162: PE(静态)  f116: 总市值
     """
+    # 数据源1：腾讯实时行情（企业网络环境最稳定）
+    try:
+        return _fetch_tencent_realtime(stock_code)
+    except Exception as e:
+        logger.debug(f"腾讯实时行情失败: {e}，尝试东方财富")
+
+    # 数据源2：东方财富
     secid = f"{_market_code(stock_code)}.{stock_code}"
     url = (
         f"https://push2.eastmoney.com/api/qt/stock/get?secid={secid}"
@@ -86,8 +91,85 @@ def fetch_realtime_quote(stock_code: str = STOCK_CODE) -> dict:
     )
     data = _http_get(url, timeout=10)
     if data is None or data.get("data") is None:
-        raise RuntimeError(f"东方财富实时行情为空: {stock_code}")
+        raise RuntimeError(f"实时行情获取失败（所有数据源）: {stock_code}")
     return data["data"]
+
+
+def _tencent_prefix(stock_code: str) -> str:
+    """腾讯行情代码前缀。"""
+    if stock_code.startswith("9"):
+        return "bj"
+    elif stock_code.startswith(("0", "3")):
+        return "sz"
+    else:
+        return "sh"
+
+
+def _fetch_tencent_realtime(stock_code: str) -> dict:
+    """从腾讯 qt.gtimg.cn 获取实时行情，转为东方财富兼容格式。
+
+    Tencent 响应字段（~分割，0-indexed）:
+      0=市场, 1=名称, 2=代码, 3=现价(元), 4=昨收(元), 5=开盘(元),
+      6=成交量(手), 9=买一价, 19=卖一价, 32=涨跌幅(%), 33=最高(元),
+      34=最低(元), 36=成交量(手), 37=成交额(万元), 38=换手率(%),
+      39=PE(静态), 45=总市值(亿元)
+    """
+    prefix = _tencent_prefix(stock_code)
+    url = f"https://qt.gtimg.cn/q={prefix}{stock_code}"
+    text = _http_get_raw(url, timeout=10)
+    if not text or "~" not in text:
+        raise RuntimeError(f"腾讯实时行情数据为空: {stock_code}")
+
+    # 提取 "字段1~字段2~..." 部分
+    key = f"v_{prefix}{stock_code}="
+    start = text.find(key)
+    if start == -1:
+        raise RuntimeError(f"腾讯实时行情解析失败: {stock_code}")
+    start += len(key) + 1  # 跳过开头的引号
+    end = text.find('";', start)
+    if end == -1:
+        end = len(text)
+    fields = text[start:end].split("~")
+
+    if len(fields) < 40:
+        raise RuntimeError(f"腾讯实时行情字段不足: 期望>=40, 实际{len(fields)}")
+
+    price = float(fields[3]) if fields[3] else 0
+    prev_close = float(fields[4]) if fields[4] else 0
+    pe = float(fields[39]) if fields[39] else 0
+    mktcap_yi = float(fields[45]) if fields[45] else 0
+    open_price = float(fields[5]) if fields[5] else 0
+    high = float(fields[33]) if fields[33] else 0
+    low = float(fields[34]) if fields[34] else 0
+    volume = int(float(fields[6])) if fields[6] else 0
+    amount_wan = float(fields[37]) if fields[37] else 0
+
+    return {
+        "f43": int(price * 100),           # 当前价 ×100
+        "f60": int(prev_close * 100),       # 昨收 ×100
+        "f57": fields[1],                   # 股票名称
+        "f162": int(pe * 100),             # PE ×100
+        "f116": int(mktcap_yi * 1e8),      # 总市值：亿元→元
+        "f46": int(open_price * 100),       # 开盘 ×100
+        "f44": int(high * 100),            # 最高 ×100
+        "f45": int(low * 100),             # 最低 ×100
+        "f47": volume,                      # 成交量（手）
+        "f48": int(amount_wan * 1e4),      # 成交额：万元→元
+    }
+
+
+def _http_get_raw(url: str, timeout: int = 10) -> str | None:
+    """HTTP GET 返回原始文本。"""
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.warning(f"HTTP GET 失败: {url[:80]}... {e}")
+        return None
 
 
 # ====== 价格数据 ======
