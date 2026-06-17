@@ -13,8 +13,11 @@ import io
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+def _fix_encoding() -> None:
+    """Windows GBK 编码修复——仅在直接运行时调用。"""
+    if sys.platform == "win32":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 BACKUP_ROOT = Path(".claude/backups")
 MAX_DAYS = 7
@@ -159,6 +162,7 @@ def list_backups() -> None:
 
 
 if __name__ == "__main__":
+    _fix_encoding()
     if "--restore" in sys.argv:
         restore()
     elif "--list" in sys.argv:
