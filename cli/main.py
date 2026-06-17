@@ -24,7 +24,10 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 from typing import Optional
 
+import logging
 import typer
+
+logger = logging.getLogger(__name__)
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -117,7 +120,8 @@ def analyze(
                 f"PE(静态) {realtime.get('f162',0)/100:.1f}  |  "
                 f"总市值 {realtime.get('f116',0)/1e8:.0f}亿[/dim]"
             )
-        except Exception:
+        except Exception as e:
+            logger.warning(f"实时行情获取失败 ({stock}): {e}")
             realtime = None
 
     # ---- Phase 3: 技术分析 ----
@@ -138,7 +142,8 @@ def analyze(
     if not mock:
         try:
             valuation = fetch_valuation_data(stock_code=stock)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"估值数据获取失败 ({stock}): {e}")
             valuation = None
         result = analyze_valuation(result, valuation)
     else:
@@ -155,7 +160,7 @@ def analyze(
     # ---- Phase 6: 决策 ----
     from core.advice import generate as generate_advice
 
-    advice = generate_advice(score_result, result, stock_name="比亚迪", current_price=price)
+    advice = generate_advice(score_result, result, stock_name=data.stock_name, current_price=price)
 
     # ---- Phase 7: 输出 ----
     _render_output(advice, score_result, result, price, verbose)
@@ -292,7 +297,8 @@ def predict(
             f"PE {rt.get('f162',0)/100:.1f}  |  市值 {rt.get('f116',0)/1e8:.0f}亿  |  "
             f"昨收 {rt.get('f60',0)/100:.2f}[/dim]"
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"实时行情转备用K线 ({stock}): {e}")
         console.print(f"[dim]价格: {cur_price:.2f} (K线)[/dim]")
 
     console.print()
@@ -304,7 +310,8 @@ def predict(
         result = analyze_technical(data)
         try:
             valuation = fetch_valuation_data(stock_code=stock)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"估值数据获取失败 ({stock}): {e}")
             valuation = None
         from core.analyzers.valuation import analyze as analyze_valuation
         result = analyze_valuation(result, valuation)
@@ -326,65 +333,25 @@ def predict(
     advice.score = min(100, max(0, advice.score))
     mkt_mult = market_range_multiplier(market)
 
-    # ====== 价格预测（融合技术指标） ======
+    # ====== 价格预测（共享模块） ======
+    from core.predict import compute_price_prediction
+
     closes = [p.close for p in prices[-20:]]
     avg = _stats.mean(closes)
-    stdev = _stats.stdev(closes)
     ups = sum(1 for p in prices[-10:] if p.close > p.open)
     ranges = [(p.high - p.low) / p.open * 100 for p in prices[-10:]]
     avg_range = _stats.mean(ranges)
 
-    # 近期动量（3日涨跌幅加权），钳制在 ±ATR 范围内
-    momentum = 0.0
-    if len(prices) >= 4:
-        raw_momentum = (
-            (prices[-1].close - prices[-2].close) * 0.5 +
-            (prices[-2].close - prices[-3].close) * 0.3 +
-            (prices[-3].close - prices[-4].close) * 0.2
-        )
-        # 钳制：动量不超过 ATR 的 1.5 倍，防止异常值
-        max_move = (result.atr_14 or stdev) * 1.5
-        momentum = max(-max_move, min(max_move, raw_momentum))
-
-    # ATR 波动率预测区间（基础宽度，后续校准会调整）
-    base_atr_range = result.atr_14 * 0.8 if result.atr_14 else stdev * 0.5
-
-    # MA 位置修正（按偏离 MA 的比例缩放，而非固定值）
-    ma_bias = 0.0
-    if result.ma_20 and result.ma_50:
-        gap_pct = (result.ma_50 - cur_price) / cur_price if cur_price > 0 else 0
-        # 偏离 MA50 越远，回归拉力越强（最大 ±0.5元）
-        ma_bias = max(-0.5, min(0.5, gap_pct * cur_price * 0.3))
-
-    # RSI 极端修正（按偏离程度缩放）
-    rsi_bias = 0.0
-    if result.rsi_14:
-        if result.rsi_14 <= 25:
-            rsi_bias = +0.5  # 深度超卖，强反弹
-        elif result.rsi_14 <= 35:
-            rsi_bias = +0.2  # 轻度超卖
-        elif result.rsi_14 >= 75:
-            rsi_bias = -0.5  # 深度超买，强回调
-        elif result.rsi_14 >= 65:
-            rsi_bias = -0.2  # 轻度超买
+    pred = compute_price_prediction(prices, result, stock, cur_price, market)
+    pred_close = pred["pred_close"]
+    pred_low = pred["pred_low"]
+    pred_high = pred["pred_high"]
+    rid = pred["record_id"]
+    momentum = pred["momentum"]
+    ma_bias = pred["ma_bias"]
+    rsi_bias = pred["rsi_bias"]
 
     cal = get_calibration(stock)
-    pred_close = cur_price + momentum * 0.3 + ma_bias + rsi_bias + cal.get("bias_correction", 0.0)
-    pred_range = base_atr_range * cal.get("range_multiplier", 1.0) * mkt_mult
-
-    # 安全钳制：预测价不能偏离现价超过 ATR×3
-    max_deviation = (result.atr_14 or stdev) * 3
-    pred_close = max(cur_price - max_deviation, min(cur_price + max_deviation, pred_close))
-    pred_low = pred_close - pred_range
-    pred_high = pred_close + pred_range
-
-    rid = record_prediction(
-        stock_code=stock,
-        predicted_low=pred_low,
-        predicted_high=pred_high,
-        predicted_close=pred_close,
-        current_price=cur_price,
-    )
 
     # ====== 输出 ======
     action_colors = {
@@ -423,7 +390,7 @@ def predict(
 
     # --- 预测面板 ---
     cal_info = ""
-    if cal["ready"]:
+    if cal.get("ready", False):
         cal_info = (
             f"  校准状态: 偏差 {cal['bias_correction']:+.2f}  |  "
             f"方向准确率 {cal['direction_accuracy']:.0f}%  |  "

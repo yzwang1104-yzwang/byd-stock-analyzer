@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Optional
 
 TRACKER_DIR = Path(".prediction_history")
-TRACKER_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_tracker_dir() -> None:
+    """延迟创建追踪目录，避免模块导入时副作用。"""
+    TRACKER_DIR.mkdir(parents=True, exist_ok=True)
 
 # ====== 记录预测 ======
 
@@ -73,8 +77,10 @@ def compute_accuracy(stock_code: str) -> dict:
     if len(completed) < 3:
         return {"status": "insufficient_data", "count": len(completed)}
 
-    # 过滤极端异常值（偏差 > 5元，明显是数据损坏）
-    valid = [r for r in completed if abs(float(r["error"])) < 5.0]
+    # 过滤极端异常值（偏差 > max(5元, 5%当前价)）
+    ref_price = float(completed[-1].get("current_price", 100))
+    threshold = max(5.0, ref_price * 0.05)
+    valid = [r for r in completed if abs(float(r["error"])) < threshold]
     filtered_count = len(completed) - len(valid)
 
     errors = [float(r["error"]) for r in valid]
@@ -225,5 +231,6 @@ def _load_records(stock_code: str) -> list[dict]:
 
 
 def _save_records(stock_code: str, records: list[dict]) -> None:
+    _ensure_tracker_dir()
     with open(_records_path(stock_code), "w") as f:
         json.dump(records, f, ensure_ascii=False, indent=2)

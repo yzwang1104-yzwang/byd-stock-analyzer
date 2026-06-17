@@ -13,7 +13,7 @@ from core.data_fetcher import fetch_price_history
 from core.models import PriceBar
 
 
-def get_market_regime() -> dict:
+def get_market_regime() -> dict[str, object]:
     """获取当前市场环境。
 
     Returns:
@@ -150,13 +150,16 @@ def market_range_multiplier(market: dict) -> float:
 def _simple_rsi(closes: list[float], period: int = 14) -> float:
     if len(closes) < period + 1:
         return 50.0
-    gains, losses = [], []
+    gains: list[float] = []
+    losses: list[float] = []
     for i in range(-period, 0):
         diff = closes[i] - closes[i - 1]
         if diff > 0:
-            gains.append(diff); losses.append(0)
+            gains.append(diff)
+            losses.append(0.0)
         else:
-            gains.append(0); losses.append(abs(diff))
+            gains.append(0.0)
+            losses.append(abs(diff))
     avg_gain = sum(gains) / period
     avg_loss = sum(losses) / period
     if avg_loss == 0:

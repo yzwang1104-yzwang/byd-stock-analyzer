@@ -289,35 +289,52 @@ def _compute_volume(result: AnalysisResult, df: pd.DataFrame) -> None:
 
 
 def _compute_trend(result: AnalysisResult, df: pd.DataFrame) -> None:
-    """判断趋势方向（基于均线形态和近期价格走势）。"""
-    close = df["close"]
+    """判断趋势方向（基于均线形态和近期价格走势）。
 
-    if len(close) < MA_PERIODS[-1]:
+    分级检测:
+    - >=200条: MA20 vs MA50 vs MA200 三代均线
+    - >=50条:  MA20 vs MA50
+    - >=20条:  MA20 斜率
+    """
+    close = df["close"]
+    n = len(close)
+
+    if n < 20:
         result.trend = "unknown"
         return
 
-    # MA20 > MA50 > MA200 = 上升趋势
     ma20 = close.rolling(window=20).mean()
-    ma50 = close.rolling(window=50).mean()
-    ma200 = close.rolling(window=200).mean()
+    ma50 = close.rolling(window=50).mean() if n >= 50 else None
+    ma200 = close.rolling(window=200).mean() if n >= 200 else None
 
     latest_20 = ma20.iloc[-1]
-    latest_50 = ma50.iloc[-1]
-    latest_200 = ma200.iloc[-1]
+    latest_50 = ma50.iloc[-1] if ma50 is not None else None
+    latest_200 = ma200.iloc[-1] if ma200 is not None else None
 
-    if not all(pd.notna([latest_20, latest_50, latest_200])):
-        result.trend = "unknown"
-        return
-
-    if latest_20 > latest_50 > latest_200:
-        result.trend = "up"
-    elif latest_20 < latest_50 < latest_200:
-        result.trend = "down"
-    else:
-        # 短期 vs 长期
-        if latest_20 > latest_200:
-            result.trend = "sideways_up"
-        elif latest_20 < latest_200:
-            result.trend = "sideways_down"
+    if latest_200 is not None and latest_50 is not None:
+        # 三代均线齐全
+        if latest_20 > latest_50 > latest_200:
+            result.trend = "up"
+        elif latest_20 < latest_50 < latest_200:
+            result.trend = "down"
         else:
             result.trend = "sideways"
+    elif latest_50 is not None:
+        # MA20 vs MA50
+        if latest_20 > latest_50:
+            result.trend = "up"
+        elif latest_20 < latest_50:
+            result.trend = "down"
+        else:
+            result.trend = "sideways"
+    else:
+        # 仅 MA20 斜率
+        ma20_slope = (ma20.iloc[-1] - ma20.iloc[-5]) / ma20.iloc[-5] if n >= 5 else 0
+        if ma20_slope > 0.01:
+            result.trend = "up"
+        elif ma20_slope < -0.01:
+            result.trend = "down"
+        else:
+            result.trend = "sideways"
+
+    return

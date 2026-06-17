@@ -1,11 +1,15 @@
-"""10步持续改进循环——自动化数据步骤（1-3, 8-10），供 cron 调用。
+"""11步持续改进循环——自动化数据步骤，供 cron 调用。
 
-历史流程（来自 CLAUDE.md）:
-1.抓行情 → 2.回写记录 → 3.比对预测 → 4.讨论需求 → 5.讨论代码
-→ 6.制定计划 → 7.调代码 → 8.验证(backtest) → 9.检验(predict) → 10.执行(commit)
+历史流程（来自 CLAUDE.md — 2026-06-16 最终版）:
+1.预测(predict) → 2.抓行情(fetch) → 3.回写记录(backfill) → 4.比对预测值(compare)
+→ 5.讨论需求 → 6.讨论代码 → 7.制定计划 → 8.改进代码
+→ 9.验证(backtest) → 10.检验(predict) → 11.提交(commit)
 
-步骤 4-7 由 Claude 在 cron 提示词中处理。
-此脚本执行步骤 1-3 + 8-9，输出摘要供 Claude 分析。
+步骤1:     python -m cli.main predict（用户可见完整输出）
+步骤2-4:   脚本自动：抓行情+回写+比对
+步骤9-10:  脚本自动：回测+检验
+步骤5-8:   Claude 处理（仅当异常时触发）
+步骤11:    Claude 处理（仅当步骤8修改了代码时触发）
 """
 
 import io
@@ -17,12 +21,14 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
+import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 
 HISTORY_DIR = Path(".prediction_history")
-RECORDS_FILE = HISTORY_DIR / "predictions_002594.json"
 
 
 def step1_fetch(stock: str = "002594") -> dict:
@@ -54,13 +60,14 @@ def step1_fetch(stock: str = "002594") -> dict:
             rt_price = rt.get("f43", 0) / 100
             if rt_price > 0:
                 cur_price = rt_price
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"实时行情获取失败 for {stock}: {e}")
 
         result = analyze_technical(data)
         try:
             valuation = fetch_valuation_data(stock_code=stock)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"估值数据获取失败 for {stock}: {e}")
             valuation = None
         result = analyze_valuation(result, valuation)
         score_result = compute_score(result)
@@ -74,42 +81,15 @@ def step1_fetch(stock: str = "002594") -> dict:
         # 方向预测
         dir_pred = predict_direction(data.prices)
 
-        # 价格预测
-        closes = [p.close for p in prices[-20:]]
-        momentum = 0.0
-        if len(prices) >= 4:
-            momentum = (
-                (prices[-1].close - prices[-2].close) * 0.5 +
-                (prices[-2].close - prices[-3].close) * 0.3 +
-                (prices[-3].close - prices[-4].close) * 0.2
-            )
-        ma_bias = 0.0
-        if result.ma_20 and result.ma_50:
-            if cur_price > result.ma_20:
-                ma_bias = -0.1
-            elif cur_price < result.ma_50:
-                ma_bias = +0.1
-        rsi_bias = 0.0
-        if result.rsi_14:
-            if result.rsi_14 < 30:
-                rsi_bias = +0.3
-            elif result.rsi_14 > 70:
-                rsi_bias = -0.3
-        pred_close = cur_price + momentum * 0.3 + ma_bias + rsi_bias
-
-        from core.prediction_tracker import record_prediction, get_calibration
-        cal = get_calibration(stock)
-        pred_close += cal.get("bias_correction", 0.0)
-        atr_range = (result.atr_14 or 0) * 0.6 * market_range_multiplier(market)
-        pred_low = pred_close - atr_range
-        pred_high = pred_close + atr_range
-        record_prediction(
-            stock_code=stock,
-            predicted_low=pred_low,
-            predicted_high=pred_high,
-            predicted_close=pred_close,
-            current_price=cur_price,
-        )
+        # 价格预测（共享模块）
+        from core.predict import compute_price_prediction
+        pred = compute_price_prediction(prices, result, stock, cur_price, market)
+        pred_close = pred["pred_close"]
+        pred_low = pred["pred_low"]
+        pred_high = pred["pred_high"]
+        momentum = pred["momentum"]
+        ma_bias = pred["ma_bias"]
+        rsi_bias = pred["rsi_bias"]
 
         return {
             "status": "ok",
@@ -137,9 +117,10 @@ def step1_fetch(stock: str = "002594") -> dict:
 
 def step2_backfill(stock: str, current_price: float) -> int:
     """步骤2: 回写记录——自动回填超过30分钟的旧预测。"""
-    if not RECORDS_FILE.exists():
+    records_file = HISTORY_DIR / f"predictions_{stock}.json"
+    if not records_file.exists():
         return 0
-    records = json.loads(RECORDS_FILE.read_text())
+    records = json.loads(records_file.read_text())
     now = datetime.now()
     backfilled = 0
     for r in records:
@@ -155,7 +136,7 @@ def step2_backfill(stock: str, current_price: float) -> int:
             r["backfill_type"] = "auto"
             backfilled += 1
     if backfilled:
-        RECORDS_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2))
+        records_file.write_text(json.dumps(records, ensure_ascii=False, indent=2))
     return backfilled
 
 
@@ -211,11 +192,20 @@ def run() -> dict:
     else:
         result["steps"]["8_backtest"] = {"skipped": "非偶数整点，跳过回测"}
 
-    # 步骤9: 检验（摘要已包含在步骤1中）
+    # 步骤9: 检验——独立验证预测质量
+    verify_issues = []
+    if predict_result["score"] >= 80 and predict_result["direction"] == "down":
+        verify_issues.append("评分高但方向看跌，存在背离——需人工判断")
+    if predict_result["score"] <= 30 and predict_result["direction"] == "up":
+        verify_issues.append("评分低但方向看涨，信号矛盾——需人工判断")
+    if accuracy.get("count", 0) >= 30 and accuracy.get("in_range_pct", 100) < 70:
+        verify_issues.append(f"区间命中率仅{accuracy['in_range_pct']}%——模型可能需校准")
     result["steps"]["9_verify"] = {
         "score": predict_result["score"],
         "direction": predict_result["direction"],
         "action": predict_result["action"],
+        "issues": verify_issues,
+        "passed": len(verify_issues) == 0,
     }
 
     result["status"] = "ok"
@@ -223,9 +213,9 @@ def run() -> dict:
 
 
 def print_summary(result: dict) -> None:
-    """打印步骤摘要，供 Claude 分析。"""
+    """打印11步摘要，供 Claude 分析。"""
     if result["status"] != "ok":
-        print("[ERROR] 10步循环失败")
+        print("[ERROR] 11步循环失败")
         return
 
     s = result["steps"]
@@ -233,34 +223,34 @@ def print_summary(result: dict) -> None:
     c = s["3_compare"]
     b = s["8_backtest"]
 
-    print(f"[1抓行情] {f['stock']} 现价{f['price']} 评分{f['score']} {f['action']} 仓位{f['position_pct']}%")
+    print(f"[1预测] python -m cli.main predict（见上方完整输出）")
+    print(f"[2抓行情] {f['stock']} 现价{f['price']} 评分{f['score']} {f['action']} 仓位{f['position_pct']}%")
     print(f"  方向:{f['direction']}({f['dir_confidence']}%置信) PE:{f['pe_pct']:.0f}%分位 PB:{f['pb_pct']:.0f}%分位 RSI:{f['rsi']:.0f}")
     if f["buy_signals"]:
         print(f"  买入信号: {' | '.join(f['buy_signals'])}")
     if f["sell_signals"]:
         print(f"  卖出信号: {' | '.join(f['sell_signals'])}")
 
-    print(f"[2回写] 自动回填 {s['2_backfill']['count']} 条旧预测")
+    print(f"[3回写] 自动回填 {s['2_backfill']['count']} 条旧预测")
 
     if c.get("status") == "ok":
-        print(f"[3比对] 预测{c['count']}次 | MAE:{c['mae']}元 | 方向准确率:{c['direction_accuracy']}% | 区间命中:{c['in_range_pct']}%")
+        print(f"[4比对] 预测{c['count']}次 | MAE:{c['mae']}元 | 方向准确率:{c['direction_accuracy']}% | 区间命中:{c['in_range_pct']}%")
     else:
-        print(f"[3比对] 数据不足，继续积累")
+        print(f"[4比对] 数据不足，继续积累")
 
     if "skipped" in b:
-        print(f"[8回测] 跳过（{b['skipped']}）")
+        print(f"[9回测] 跳过（{b['skipped']}）")
     else:
-        print(f"[8回测] 方向:{b['directional_accuracy']}% | 近10次:{b['recent_10']}% | 涨:{b['up_acc']}% 跌:{b['down_acc']}%")
+        print(f"[9回测] 方向:{b['directional_accuracy']}% | 近10次:{b['recent_10']}% | 涨:{b['up_acc']}% 跌:{b['down_acc']}%")
 
-    print(f"[9检验] 评分:{f['score']} | 方向:{f['direction']} | 建议:{f['action']}")
+    print(f"[10检验] 评分:{f['score']} | 方向:{f['direction']} | 建议:{f['action']}")
 
     # 异常检测
     anomalies = []
     if f["score"] >= 80:
-        anomalies.append(f"买入红色警报: 评分≥80——建议立即加仓！")
+        anomalies.append(f"买入红色警报: 评分>=80——建议立即加仓!")
     if f["score"] <= 30:
-        anomalies.append(f"强烈卖出警报: 评分≤30——建议清仓！")
-    # 方向准确率: 短期方向~48%是天花板（市场有效假说），仅当>50样本且<20%才告警
+        anomalies.append(f"强烈卖出警报: 评分<=30——建议清仓!")
     n_backfilled = c.get("count", 0)
     dir_acc = c.get("direction_accuracy", 50)
     if n_backfilled >= 50 and dir_acc < 20:
@@ -273,17 +263,17 @@ def print_summary(result: dict) -> None:
         anomalies.append(f"PE分位<10%——极度低估，历史级买入机会")
 
     if anomalies:
-        print(f"\n[异常] 发现 {len(anomalies)} 个异常，需要 Claude 分析:")
+        print(f"\n[异常] 发现 {len(anomalies)} 个异常，触发 Claude 介入:")
         for a in anomalies:
             print(f"  {a}")
-        print("  → 执行步骤4-7: 讨论需求→讨论代码→制定计划→调代码")
-        print("  → 执行步骤10: git commit 保存改动")
+        print("  -> [5]讨论需求 → [6]讨论代码 → [7]制定计划 → [8]改进代码")
+        print("  -> [11] git commit 保存改动")
     else:
-        print(f"\n[正常] 无异常，跳过步骤4-7和步骤10")
+        print(f"\n[正常] 无异常，跳过步骤5-8和步骤11")
 
 
 if __name__ == "__main__":
-    print(f"=== 10步持续改进循环 === {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"=== 11步持续改进循环 === {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print()
     try:
         r = run()
