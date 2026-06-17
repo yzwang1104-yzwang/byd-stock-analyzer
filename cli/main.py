@@ -553,8 +553,8 @@ def _auto_backfill(stock: str, current_price: float) -> None:
         if r.get("actual_close"):
             continue
         try:
-            ts = _dt.fromisoformat(r["timestamp"])
-        except ValueError:
+            ts = _dt.fromisoformat(r.get("timestamp", ""))
+        except (ValueError, KeyError):
             continue
         if now - ts > _td(minutes=30):
             r["actual_close"] = round(current_price, 2)
