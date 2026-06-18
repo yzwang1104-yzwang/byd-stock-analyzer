@@ -122,51 +122,90 @@ def analyze_stock(code):
         elif ma20 < ma50 * 0.99: trend = 'down'
         else: trend = 'sideways'
 
-        # Chg 20d
+        # Chg 20d, 5d, 3d
         chg_20d = (cur - closes[-21]) / closes[-21] * 100 if len(closes) >= 21 else 0
+        chg_5d = (cur - closes[-6]) / closes[-6] * 100 if len(closes) >= 6 else 0
+        chg_3d = (cur - closes[-4]) / closes[-4] * 100 if len(closes) >= 4 else 0
 
-        # Score (simplified TOP10 scoring)
+        # Momentum direction: 加速跌 / 减速跌 / 企稳 / 上涨
+        # 3日 vs 5日: 3日跌幅更大 → 加速下跌
+        momentum_accel = chg_3d - chg_5d  # 负数=加速下跌, 正数=跌速放缓
+        falling_knife = trend == 'down' and chg_3d < -3 and momentum_accel < -1  # 加速下跌中
+
+        # Score (重新设计: 找即将上涨的，不是找便宜的)
         score = 50
-        # Valuation
+
+        # 估值 — 始终重要
         if pe_pct is not None:
-            score += max(0, min(25, (1 - pe_pct/100) * 25))
+            score += max(0, min(20, (1 - pe_pct/100) * 20))
         if pb_pct is not None:
-            score += max(0, min(15, (1 - pb_pct/100) * 15))
-        # RSI
+            score += max(0, min(10, (1 - pb_pct/100) * 10))
+
+        # RSI — 只在非下跌趋势或跌速放缓时加分
         if not np.isnan(rsi):
-            if rsi < 25: score += 12
-            elif rsi < 30: score += 8
-            elif rsi < 35: score += 5
-            elif rsi > 75: score -= 8
-            elif rsi > 70: score -= 4
-        # Trend
-        if trend == 'up': score += 8
-        elif trend == 'sideways': score += 2
+            if trend == 'up':
+                if rsi < 25: score += 12
+                elif rsi < 30: score += 8
+                elif rsi < 35: score += 5
+            elif trend == 'sideways':
+                if rsi < 25: score += 8
+                elif rsi < 30: score += 5
+            else:  # trend down — RSI 超卖是常态，少加分
+                if rsi < 25 and momentum_accel > -0.5: score += 5  # 极端+放缓才加分
+                elif rsi < 30 and momentum_accel > 0: score += 3   # 减速跌才加分
+
+        # 趋势
+        if trend == 'up': score += 10
+        elif trend == 'sideways': score += 4
+        else: score -= 5  # 下跌趋势惩罚
+
         # MACD
         if macd > 0: score += 5
-        # BB
+
+        # BB — 只在非加速下跌时加分
         if not np.isnan(bb_pos):
-            if bb_pos < 0.1: score += 8
-            elif bb_pos < 0.25: score += 4
-        # Super dip
-        if chg_20d < -15: score += 5
+            if not falling_knife:
+                if bb_pos < 0.1: score += 6
+                elif bb_pos < 0.25: score += 3
+            else:
+                if bb_pos < 0.1: score += 2  # 加速跌时布林下轨减分力度
+
+        # 超跌反弹潜力 — 只有跌速放缓(筑底)才加分
+        if chg_20d < -15 and momentum_accel > -1:
+            score += 5
+
+        # 加速下跌惩罚
+        if falling_knife:
+            score -= 8
+
+        # 短期动量方向
+        if chg_3d > 1: score += 4          # 近3日在涨
+        elif chg_3d < -3: score -= 4       # 近3日大跌
 
         score = max(0, min(100, score))
 
         # Signals
         signals = []
-        if not np.isnan(rsi) and rsi < 30: signals.append(f"RSI{rsi:.0f}超卖")
+        if not np.isnan(rsi) and rsi < 30:
+            if trend != 'down' or momentum_accel > 0:
+                signals.append(f"RSI{rsi:.0f}超卖(筑底)")
+            else:
+                signals.append(f"RSI{rsi:.0f}超卖(注意飞刀)")
         if pe_pct is not None and pe_pct < 15: signals.append(f"PE{pe_pct:.0f}%极低")
         if pb_pct is not None and pb_pct < 15: signals.append(f"PB{pb_pct:.0f}%极低")
         if macd > 0: signals.append("MACD金叉")
         if trend == 'up': signals.append("趋势向上")
         if chg_20d < -15: signals.append(f"超跌{chg_20d:.0f}%")
-        if bb_pos < 0.15: signals.append("布林下轨超卖")
+        if falling_knife: signals.append("⚠️加速下跌")
+        if momentum_accel > 0 and chg_3d < 0: signals.append("跌速放缓")
+        if bb_pos < 0.15 and not falling_knife: signals.append("布林下轨超卖")
 
         return {
             'code': code, 'price': cur, 'score': score,
             'rsi': rsi, 'pe_pct': pe_pct, 'pb_pct': pb_pct,
-            'trend': trend, 'chg_20d': chg_20d,
+            'trend': trend, 'chg_20d': chg_20d, 'chg_3d': chg_3d,
+            'momentum_accel': momentum_accel,
+            'falling_knife': falling_knife,
             'signals': '; '.join(signals) if signals else '无特殊信号',
         }
     except Exception as e:
@@ -186,12 +225,18 @@ for f in sorted(os.listdir('.cache')):
 
 results.sort(key=lambda x: x['score'], reverse=True)
 
-print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"20日":>6}\n{"="*75}')
+print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"3日":>6} {"20日":>6}  {"信号"}')
+print(f'{"="*100}')
 for i, r in enumerate(results[:20]):
     name = STOCK_NAMES.get(r['code'], '?')[:8]
     trend_icon = '↑' if r['trend']=='up' else ('↓' if r['trend']=='down' else '→')
-    print(f'{i+1:<3} {r["code"]:<8} {name:<8} {r["price"]:>8.2f} {r["score"]:>4.0f} {r["rsi"]:>5.0f} {r["pe_pct"]:>5.0f} {r["pb_pct"]:>5.0f} {trend_icon:<4} {r["chg_20d"]:>+5.0f}%')
-    print(f'    {r["signals"]}')
+    accel = r.get('momentum_accel', 0)
+    accel_str = f'{accel:+.1f}%'
+    knife = '⚠️' if r.get('falling_knife') else '  '
+    chg3 = r['chg_3d']
+    chg20 = r['chg_20d']
+    sig = r['signals']
+    print(f'{knife}{i+1:<3} {r["code"]:<8} {name:<8} {r["price"]:>8.2f} {r["score"]:>4.0f} {r["rsi"]:>5.0f} {r["pe_pct"]:>5.0f} {r["pb_pct"]:>5.0f} {trend_icon:<4} {chg3:>+5.0f}% {chg20:>+5.0f}%  {sig}')
 
 print(f'\n{"="*75}')
 hi = sum(1 for r in results if r['score']>=70)
