@@ -6,8 +6,57 @@ import json
 
 from django.shortcuts import render
 
-STOCKS = ["002594", "920839", "600370", "600567"]
-STOCK_NAMES = {"002594": "比亚迪", "920839": "920839", "600370": "600370", "600567": "600567"}
+def _get_stock_list() -> list[str]:
+    """自动发现股票列表：持仓文件 + 缓存中有数据的股票。"""
+    from pathlib import Path
+    codes = set()
+    # 从持仓文件读取
+    pos_dir = Path(".position_history")
+    if pos_dir.exists():
+        for f in pos_dir.glob("*.json"):
+            if f.stem != "portfolio_snapshots":
+                codes.add(f.stem)
+    # 从缓存读取有数据的股票
+    cache_dir = Path(".cache")
+    if cache_dir.exists():
+        for f in cache_dir.glob("prices_*.csv"):
+            codes.add(f.stem.replace("prices_", ""))
+    # 排除 ETF，排序
+    codes.discard("159915"); codes.discard("159919")
+    codes.discard("510050"); codes.discard("510300"); codes.discard("512100")
+    return sorted(codes)
+
+STOCKS = _get_stock_list()
+
+def _get_stock_name(code: str) -> str:
+    """从腾讯API获取股票名称，失败返回代码。"""
+    import urllib.request, ssl, os
+    cache = {}
+    name_file = ".cache/stock_names.json"
+    # 读缓存
+    if os.path.exists(name_file):
+        try:
+            cache = json.load(open(name_file))
+        except: pass
+    if code in cache:
+        return cache[code]
+    # 查腾讯API
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        prefix = "nq" if code.startswith(("9","8")) else ("sz" if code.startswith(("0","3")) else "sh")
+        url = f"https://qt.gtimg.cn/q={prefix}{code}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        resp = urllib.request.urlopen(req, timeout=5, context=ctx)
+        text = resp.read().decode("gbk", errors="replace")
+        for line in text.split("\n"):
+            if "~" in line and "none_match" not in line:
+                name = line.split("~")[1]
+                cache[code] = name
+                json.dump(cache, open(name_file, "w"))
+                return name
+    except: pass
+    return code
 
 
 def _run_analysis(code: str) -> dict:
@@ -58,7 +107,7 @@ def _run_analysis(code: str) -> dict:
 
     return {
         "code": code,
-        "name": STOCK_NAMES.get(code, code),
+        "name": _get_stock_name(code),
         "price": data.latest_price,
         "score": advice.score,
         "action": advice.action_label,
