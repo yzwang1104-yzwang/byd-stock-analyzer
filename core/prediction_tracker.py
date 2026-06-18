@@ -57,9 +57,9 @@ def backfill_actual(stock_code: str, actual_price: float, fill_type: str = "manu
     records = _load_records(stock_code)
     count = 0
     for r in records:
-        if not r["actual_close"]:
+        if not r.get("actual_close"):
             r["actual_close"] = round(actual_price, 2)
-            r["error"] = round(actual_price - float(r["predicted_close"]), 2)
+            r["error"] = round(actual_price - float(r.get("predicted_close", 0)), 2)
             r["backfill_type"] = fill_type
             count += 1
     if count:
@@ -83,39 +83,52 @@ def compute_accuracy(stock_code: str) -> dict:
     valid = [r for r in completed if abs(float(r["error"])) < threshold]
     filtered_count = len(completed) - len(valid)
 
-    errors = [float(r["error"]) for r in valid]
-    abs_errors = [abs(e) for e in errors]
+    errors = [float(r.get("error", 0) or 0) for r in valid]
+    abs_errors = [abs(e) for e in errors if e != 0]
 
     # 方向准确率——只统计明确标记为 manual 的记录
-    # auto-backfill 和无标记(旧数据)的 actual_close 可能不是真实收盘价
-    dir_records = [r for r in valid if r.get("backfill_type") == "manual"]
+    dir_records = [r for r in valid if r.get("backfill_type") == "manual"
+                   and r.get("predicted_close") and r.get("current_price")]
     direction_correct = 0
     direction_total = 0
     for r in dir_records:
-        pred_change = float(r["predicted_close"]) - float(r["current_price"])
-        actual_change = float(r["actual_close"]) - float(r["current_price"])
-        if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
-            direction_total += 1
-            if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
-                direction_correct += 1
+        try:
+            pred_change = float(r["predicted_close"]) - float(r["current_price"])
+            actual_change = float(r["actual_close"]) - float(r["current_price"])
+            if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
+                direction_total += 1
+                if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
+                    direction_correct += 1
+        except (KeyError, ValueError, TypeError):
+            continue
 
-    # 手动回填的方向准确率（纯真实收盘价，最可靠）
-    manual = [r for r in valid if r.get("backfill_type") == "manual"]
+    # 手动回填的方向准确率
+    manual = [r for r in valid if r.get("backfill_type") == "manual"
+              and r.get("predicted_close") and r.get("current_price")]
     manual_dir_correct = 0
     manual_dir_total = 0
     for r in manual:
-        pred_change = float(r["predicted_close"]) - float(r["current_price"])
-        actual_change = float(r["actual_close"]) - float(r["current_price"])
-        if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
-            manual_dir_total += 1
-            if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
-                manual_dir_correct += 1
+        try:
+            pred_change = float(r["predicted_close"]) - float(r["current_price"])
+            actual_change = float(r["actual_close"]) - float(r["current_price"])
+            if abs(pred_change) > 0.15 or abs(actual_change) > 0.15:
+                manual_dir_total += 1
+                if (pred_change > 0 and actual_change > 0) or (pred_change < 0 and actual_change < 0):
+                    manual_dir_correct += 1
+        except (KeyError, ValueError, TypeError):
+            continue
 
     # 区间命中
-    in_range = sum(
-        1 for r in valid
-        if float(r["predicted_low"]) <= float(r["actual_close"]) <= float(r["predicted_high"])
-    )
+    in_range = 0
+    for r in valid:
+        try:
+            lo = float(r.get("predicted_low", 0))
+            hi = float(r.get("predicted_high", 0))
+            ac = float(r.get("actual_close", 0))
+            if lo <= ac <= hi:
+                in_range += 1
+        except (KeyError, ValueError, TypeError):
+            continue
 
     return {
         "status": "ok",
