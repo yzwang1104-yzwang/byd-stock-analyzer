@@ -5,6 +5,11 @@ import io
 from datetime import date, datetime
 from pathlib import Path
 
+# Ensure project root is in path (for standalone execution)
+_project_root = Path(__file__).resolve().parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 
 def _fix_encoding() -> None:
     """Windows GBK 编码修复——仅在直接运行时调用。"""
@@ -81,10 +86,25 @@ def check_prediction_history() -> dict:
 
 def run():
     """执行所有检查并输出报告。"""
+    from core.trading_calendar import is_trading_day
+
+    today = date.today()
+    is_td, reason = is_trading_day(today)
+
     print()
     print("=" * 60)
-    print(f"  会话启动检查 — {date.today()}")
+    print(f"  会话启动检查 — {today}")
     print("=" * 60)
+    print()
+
+    # 0. 交易日检查（最优先）
+    if not is_td:
+        print(f"  🔴 今日休市: {reason}")
+        print("  ⏸  跳过所有股票监控任务")
+        print("=" * 60)
+        return False  # 返回 False 表示非交易日
+    else:
+        print(f"  🟢 交易日 — {reason}")
     print()
 
     all_ok = True
