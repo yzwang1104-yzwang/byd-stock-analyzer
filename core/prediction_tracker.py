@@ -179,21 +179,25 @@ def get_calibration(stock_code: str) -> dict:
     in_range = stats["in_range_pct"]
     range_mult = 1.0
     if in_range < 70:
-        range_mult = 1.5  # 命中太低：大幅扩宽
+        range_mult = 1.6
     elif in_range < 80:
-        range_mult = 1.3
-    elif in_range < 88:
-        range_mult = 1.15  # 接近目标，微调
+        range_mult = 1.40
+    elif in_range < 85:
+        range_mult = 1.25
+    elif in_range < 90:
+        range_mult = 1.15
     elif in_range < 93:
-        range_mult = 1.05  # 接近95%，保持
+        range_mult = 1.08
+    elif in_range < 95:
+        range_mult = 1.03  # 接近目标，微扩
     elif in_range >= 99:
-        range_mult = 0.85  # 接近完美，适度收窄
-    elif in_range >= 97:
-        range_mult = 0.90
-    elif in_range >= 95:
-        range_mult = 0.95  # 达标，保守收窄
-    else:
-        range_mult = 1.0
+        range_mult = 0.88
+    elif in_range >= 98:
+        range_mult = 0.92
+    elif in_range >= 96:
+        range_mult = 0.96
+    else:  # 95-96%
+        range_mult = 1.0  # 达标，保持
 
     # 连续命中奖励（仅当命中率已达标时适度收窄）
     if in_range >= 95 and consecutive >= 10:

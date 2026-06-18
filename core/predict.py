@@ -45,7 +45,7 @@ def compute_price_prediction(
 
     # ── ATR 基础区间 ────────────────────────────────────
     if result.atr_14 is not None and result.atr_14 > 0:
-        base_atr_range = result.atr_14 * 0.8
+        base_atr_range = result.atr_14 * 0.85  # 0.80→0.85 目标区间命中95%+
     else:
         base_atr_range = cur_price * 0.02  # 回退: 当前价的2%
 

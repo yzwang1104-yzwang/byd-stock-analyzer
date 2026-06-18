@@ -77,11 +77,24 @@ def predict_market(days: int = 250) -> dict:
     scores = [r["score"] for r in results.values()]
     composite = round(sum(scores) / len(scores))
 
+    # 一致性惩罚：所有指数同向 → 过度一致往往意味着反转
+    directions = [r["direction"] for r in results.values()]
+    up_count = sum(1 for d in directions if d == "涨")
+    down_count = sum(1 for d in directions if d == "跌")
+    agreement = max(up_count, down_count) / len(directions)  # 0.5=分歧, 1.0=全票
+
+    # 全票通过 → 向50回拉（过度一致=反转风险）
+    if agreement >= 1.0:
+        composite = round(composite * 0.85 + 50 * 0.15)  # 向中性回拉15%
+
+    # 收窄震荡带：60/40 替代 55/45（更多判震荡，减少错误方向判断）
     prediction = {
         "date": today,
         "indices": results,
         "composite_score": composite,
-        "prediction": "涨" if composite > 55 else ("跌" if composite < 45 else "震荡"),
+        "up_count": up_count,
+        "down_count": down_count,
+        "prediction": "涨" if composite > 60 else ("跌" if composite < 40 else "震荡"),
     }
 
     # 保存预测
