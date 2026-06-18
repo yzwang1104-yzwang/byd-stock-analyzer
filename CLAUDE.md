@@ -1104,9 +1104,48 @@ Cron: 12个在线 Git: ✅
 
 ### 明日关注
 
-- [ ] 验证改进后预测准确率(目标区间 95%+)
+- [x] 验证改进后预测准确率 — 区间 93.9% (↑0.3%), 目标 95%
 - [ ] 688472 阿特斯是否触及 10.94 第一批建仓位？
 - [ ] 上汽是否止跌反弹(RSI 6 不可能持久)？
 - [ ] 三房反弹到 1.85-2.00 减仓
 
-**最后更新:** 2026-06-18 15:40 CST
+### 下午（16:30-17:00）：排序功能 + TDD + 代码审查
+
+| 时间 | 事件 |
+|------|------|
+| 16:30 | 仪表盘加排序 bar: 评分/现价/PE/PB/RSI/20日 点击切换 |
+| 16:30 | 持仓管理加排序 bar: 评分/现价/盈亏%/PE/RSI |
+| 16:30 | CLI top20/tenbagger 加 --sort 参数 |
+| 16:35 | /review 本地审查: 3 个 INFORMATIONAL 全部 auto-fixed |
+| 16:35 | views.py: 裸 except→Exception, JSON 编码修复 |
+| 16:35 | scan.html: Alpine.js null 安全 (pe_pct||50) |
+| 16:40 | /brainstorming: 排序功能设计 → 4 文件 60 行 |
+| 16:50 | /TDD: trading_calendar.py 10 测试, 28→28 全过 |
+| 16:55 | CLAUDE.md 更新 |
+
+### 排序功能覆盖
+
+| 页面/工具 | 排序方式 | 默认 |
+|------|------|:--:|
+| 仪表盘 `/` | 6 列点击切换 | 评分↓ |
+| 持仓 `/positions/` | 5 列点击切换 | 评分↓ |
+| 对比 `/scan/` | 8 列点击切换 | 评分↓ |
+| `top20 --sort rsi` | 任意列 | 评分↓ |
+| `tenbagger --sort atr_pct` | 任意列 | 潜力分↓ |
+
+### 今日 Commits (新增)
+
+```
+f09a702 test: add trading_calendar.py tests (10 passing)
+15f6c79 feat: sort functionality for all pages and CLI tools
+ab23602 fix: auto-discover stocks — no more hardcoded list
+```
+
+### 测试覆盖
+
+```
+28 tests | 0 failures | 0.14s
++10 trading_calendar (weekday/weekend/holiday/makeup/next)
+```
+
+**最后更新:** 2026-06-18 17:00 CST
