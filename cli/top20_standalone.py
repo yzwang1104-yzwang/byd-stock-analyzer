@@ -122,6 +122,10 @@ def analyze_stock(code):
         elif ma20 < ma50 * 0.99: trend = 'down'
         else: trend = 'sideways'
 
+        # Historical low
+        low_all = np.min(closes)
+        from_low = (cur - low_all) / low_all * 100
+
         # Chg 20d, 5d, 3d
         chg_20d = (cur - closes[-21]) / closes[-21] * 100 if len(closes) >= 21 else 0
         chg_5d = (cur - closes[-6]) / closes[-6] * 100 if len(closes) >= 6 else 0
@@ -206,6 +210,7 @@ def analyze_stock(code):
             'trend': trend, 'chg_20d': chg_20d, 'chg_3d': chg_3d,
             'momentum_accel': momentum_accel,
             'falling_knife': falling_knife,
+            'low_all': low_all, 'from_low': from_low,
             'signals': '; '.join(signals) if signals else '无特殊信号',
         }
     except Exception as e:
@@ -225,18 +230,19 @@ for f in sorted(os.listdir('.cache')):
 
 results.sort(key=lambda x: x['score'], reverse=True)
 
-print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"3日":>6} {"20日":>6}  {"信号"}')
-print(f'{"="*100}')
+print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"最低":>7} {"距低":>6} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"3日":>6} {"20日":>6}  {"信号"}')
+print(f'{"="*110}')
 for i, r in enumerate(results[:20]):
     name = STOCK_NAMES.get(r['code'], '?')[:8]
     trend_icon = '↑' if r['trend']=='up' else ('↓' if r['trend']=='down' else '→')
-    accel = r.get('momentum_accel', 0)
-    accel_str = f'{accel:+.1f}%'
     knife = '⚠️' if r.get('falling_knife') else '  '
     chg3 = r['chg_3d']
     chg20 = r['chg_20d']
     sig = r['signals']
-    print(f'{knife}{i+1:<3} {r["code"]:<8} {name:<8} {r["price"]:>8.2f} {r["score"]:>4.0f} {r["rsi"]:>5.0f} {r["pe_pct"]:>5.0f} {r["pb_pct"]:>5.0f} {trend_icon:<4} {chg3:>+5.0f}% {chg20:>+5.0f}%  {sig}')
+    lo = r.get('low_all', 0)
+    flo = r.get('from_low', 0)
+    flo_str = f'+{flo:.0f}%' if flo > 5 else f'‼️+{flo:.0f}%'
+    print(f'{knife}{i+1:<3} {r["code"]:<8} {name:<8} {r["price"]:>8.2f} {r["score"]:>4.0f} {lo:>7.2f} {flo_str:>6} {r["rsi"]:>5.0f} {r["pe_pct"]:>5.0f} {r["pb_pct"]:>5.0f} {trend_icon:<4} {chg3:>+5.0f}% {chg20:>+5.0f}%  {sig}')
 
 print(f'\n{"="*75}')
 hi = sum(1 for r in results if r['score']>=70)
