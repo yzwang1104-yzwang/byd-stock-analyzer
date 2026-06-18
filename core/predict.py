@@ -49,23 +49,50 @@ def compute_price_prediction(
     else:
         base_atr_range = cur_price * 0.02  # 回退: 当前价的2%
 
+    # ── 动量扩展：持续下跌/上涨时自动加宽区间 ────────────
+    # 用5日动量判断方向强度，强趋势 = 更大的不确定性
+    if len(prices) >= 6:
+        mom_5d = (prices[-1].close - prices[-6].close) / prices[-6].close
+        mom_strength = abs(mom_5d)
+        if mom_strength > 0.05:   # 5日累计涨跌>5% → 强趋势
+            base_atr_range *= 1.5
+        elif mom_strength > 0.03:  # 3-5% → 中等趋势
+            base_atr_range *= 1.3
+        elif mom_strength > 0.02:  # 2-3% → 温和趋势
+            base_atr_range *= 1.15
+
+    # ── 趋势强度：强趋势时减弱均值回归倾向 ────────────────
+    trend_strength = 0.0
+    if len(prices) >= 10:
+        # 10日价格路径的一致性：连续同向天数越多 → 趋势越强
+        closes_10 = [p.close for p in prices[-10:]]
+        ups = sum(1 for i in range(1, 10) if closes_10[i] > closes_10[i - 1])
+        downs = 9 - ups
+        # 0=完全震荡, 1=完全单边
+        trend_strength = abs(ups - downs) / 9
+
     # ── MA 均值回归（按偏离比例缩放）─────────────────────
     ma_bias = 0.0
     if result.ma_20 and result.ma_50 and cur_price > 0:
         gap_pct = (result.ma_50 - cur_price) / cur_price
-        ma_bias = max(-0.5, min(0.5, gap_pct * cur_price * 0.3))
+        raw_ma_bias = max(-0.5, min(0.5, gap_pct * cur_price * 0.3))
+        # 强趋势时减弱均值回归（顺势而为）
+        ma_bias = raw_ma_bias * (1 - trend_strength * 0.7)
 
-    # ── RSI 修正（4档）──────────────────────────────────
+    # ── RSI 修正（4档），强趋势时减弱 ────────────────────
     rsi_bias = 0.0
     if result.rsi_14 is not None:
         if result.rsi_14 <= 25:
-            rsi_bias = +0.5
+            raw_rsi_bias = +0.5
         elif result.rsi_14 <= 35:
-            rsi_bias = +0.2
+            raw_rsi_bias = +0.2
         elif result.rsi_14 >= 75:
-            rsi_bias = -0.5
+            raw_rsi_bias = -0.5
         elif result.rsi_14 >= 65:
-            rsi_bias = -0.2
+            raw_rsi_bias = -0.2
+        else:
+            raw_rsi_bias = 0.0
+        rsi_bias = raw_rsi_bias * (1 - trend_strength * 0.7)
 
     # ── 校准偏差 ────────────────────────────────────────
     cal = get_calibration(stock)
