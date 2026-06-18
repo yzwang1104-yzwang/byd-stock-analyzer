@@ -228,7 +228,13 @@ for f in sorted(os.listdir('.cache')):
     if r:
         results.append(r)
 
-results.sort(key=lambda x: x['score'], reverse=True)
+# --sort 参数: python cli/top20_standalone.py --sort rsi
+sort_col = 'score'
+if '--sort' in sys.argv:
+    idx = sys.argv.index('--sort')
+    if idx + 1 < len(sys.argv):
+        sort_col = sys.argv[idx + 1]
+results.sort(key=lambda x: x.get(sort_col, 0) or 0, reverse=(sort_col != 'chg_20d' and sort_col != 'chg_3d'))
 
 print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"最低":>7} {"距低":>6} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"3日":>6} {"20日":>6}  {"信号"}')
 print(f'{"="*110}')

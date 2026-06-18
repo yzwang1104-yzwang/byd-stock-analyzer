@@ -4,6 +4,8 @@ import io, sys
 import statistics
 import json
 
+from pathlib import Path
+
 from django.shortcuts import render
 
 def _get_stock_list() -> list[str]:
@@ -36,7 +38,7 @@ def _get_stock_name(code: str) -> str:
     # 读缓存
     if os.path.exists(name_file):
         try:
-            cache = json.load(open(name_file))
+            cache = json.load(open(name_file, encoding="utf-8"))
         except: pass
     if code in cache:
         return cache[code]
@@ -55,7 +57,8 @@ def _get_stock_name(code: str) -> str:
                 cache[code] = name
                 json.dump(cache, open(name_file, "w"))
                 return name
-    except: pass
+    except Exception:
+        pass
     return code
 
 
@@ -117,6 +120,8 @@ def _run_analysis(code: str) -> dict:
         "confidence": advice.confidence,
         "pe_pct": result.pe_percentile,
         "pb_pct": result.pb_percentile,
+        "rsi": result.rsi_14,
+        "chg_20d": round((data.latest_price - (closes[-21] if len(closes) >= 21 else data.latest_price)) / (closes[-21] if len(closes) >= 21 else 1) * 100, 1) if len(closes) >= 21 else None,
         "trend": result.trend,
         "rsi": result.rsi_14,
         "macd": result.macd,
@@ -171,17 +176,32 @@ def _calc_boll(values: list, period: int, std: int) -> tuple:
 # ====== Views ======
 
 def dashboard(request):
-    """仪表盘主页——4只股票一览。"""
+    """仪表盘主页——持仓股票 + 比亚迪。"""
     from core.market_context import get_market_regime
+    from core.position_manager import load_position
     market = get_market_regime()
 
+    # 只显示有持仓的股票 + 比亚迪（始终关注）
+    has_pos = set()
+    pos_dir = Path(".position_history")
+    if pos_dir.exists():
+        for f in pos_dir.glob("*.json"):
+            if f.stem != "portfolio_snapshots":
+                has_pos.add(f.stem)
+    show_codes = list(has_pos) if has_pos else ["002594", "600104", "600370"]
+    if "002594" not in show_codes:
+        show_codes.insert(0, "002594")
+
     stocks_data = []
-    for code in STOCKS:
+    for code in show_codes:
         try:
             d = _run_analysis(code)
         except Exception as e:
             d = {"code": code, "name": code, "price": 0, "score": 0, "error": str(e)[:50]}
         stocks_data.append(d)
+
+    # 按评分从高到低排序
+    stocks_data.sort(key=lambda x: x.get("score", 0), reverse=True)
 
     from core.position_manager import load_position
     for d in stocks_data:
@@ -197,8 +217,13 @@ def dashboard(request):
         else:
             d["has_position"] = False
 
+    stocks_json = json.dumps([
+        {k: v for k, v in d.items() if k not in ("dates", "closes", "ma20_series", "ma50_series", "boll_upper_series", "boll_lower_series")}
+        for d in stocks_data
+    ], ensure_ascii=False)
     return render(request, "stocks/dashboard.html", {
         "stocks": stocks_data,
+        "stocks_json": stocks_json,
         "market": market,
     })
 
@@ -216,9 +241,21 @@ def stock_predict(request, code: str):
 
 
 def scan(request):
-    """多股票对比。"""
-    stocks_data = [_run_analysis(c) for c in STOCKS]
-    return render(request, "stocks/scan.html", {"stocks": stocks_data})
+    """多股票对比——按评分降序。"""
+    stocks_data = []
+    for c in STOCKS[:50]:  # 限制50只避免超时
+        try:
+            d = _run_analysis(c)
+            stocks_data.append(d)
+        except Exception:
+            pass
+    stocks_data.sort(key=lambda x: x.get("score", 0), reverse=True)
+    # 转为JSON安全的格式（只保留展示字段，日期列表太大）
+    stocks_json = json.dumps([
+        {k: v for k, v in d.items() if k not in ("dates", "closes", "ma20_series", "ma50_series", "boll_upper_series", "boll_lower_series")}
+        for d in stocks_data
+    ], ensure_ascii=False)
+    return render(request, "stocks/scan.html", {"stocks": stocks_data, "stocks_json": stocks_json})
 
 
 def positions(request):
@@ -245,8 +282,13 @@ def positions(request):
             })
     total_pnl = sum(p["pos_pnl"] for p in pos_list)
     total_cost = sum(p["pos_cost"] for p in pos_list)
+    pos_json = json.dumps([
+        {k: v for k, v in p.items() if k not in ("dates", "closes", "ma20_series", "ma50_series", "boll_upper_series", "boll_lower_series", "pos_entries")}
+        for p in pos_list
+    ], ensure_ascii=False)
     return render(request, "stocks/positions.html", {
         "positions": pos_list,
+        "positions_json": pos_json,
         "total_pnl": total_pnl,
         "total_cost": total_cost,
         "total_pnl_pct": (total_pnl / total_cost * 100) if total_cost > 0 else 0,

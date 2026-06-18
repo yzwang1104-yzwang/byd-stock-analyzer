@@ -2,36 +2,64 @@
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><title>持仓管理</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>body{background:#0f172a;color:#e2e8f0;font-family:system-ui}.card{background:#1e293b;border-radius:12px;padding:1.25rem}</style></head>
-<body class="p-6"><div class="max-w-3xl mx-auto">
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3"></script>
+<style>body{background:#0f172a;color:#e2e8f0;font-family:system-ui}.card{background:#1e293b;border-radius:12px;padding:1.25rem}.sort-btn{padding:2px 10px;border-radius:4px;cursor:pointer;font-size:12px;border:1px solid #334155}.sort-btn.active{background:#2563eb;border-color:#2563eb;color:white}</style></head>
+<body class="p-6" x-data="{
+  sortKey: 'score', sortDir: -1,
+  positions: {{ positions_json|safe }},
+  get sorted() {
+    return [...this.positions].sort((a,b) => {
+      let va = a[this.sortKey], vb = b[this.sortKey];
+      if (va == null) va = 0; if (vb == null) vb = 0;
+      return (va - vb) * this.sortDir;
+    });
+  },
+  toggle(key) { if (this.sortKey === key) this.sortDir *= -1; else { this.sortKey = key; this.sortDir = -1; } }
+}">
+<div class="max-w-3xl mx-auto">
 <a href="/" class="text-cyan-400 text-sm hover:underline mb-4 inline-block">← 返回</a>
-<h1 class="text-xl font-bold mb-4">持仓管理</h1>
+<h1 class="text-xl font-bold mb-2">持仓管理</h1>
 
-{% if positions %}
-  {% for p in positions %}
+<template x-if="positions.length">
+<div class="flex gap-2 mb-4 text-slate-400 text-xs items-center">
+  <span>排序:</span>
+  <template x-for="[k,label] in [['score','评分'],['price','现价'],['pos_pnl_pct','盈亏%'],['pe_pct','PE分位'],['rsi','RSI']]" :key="k">
+    <button class="sort-btn" :class="{ active: sortKey===k }" @click="toggle(k)">
+      <span x-text="label"></span>
+      <span x-show="sortKey===k" x-text="sortDir===1?'▲':'▼'"></span>
+    </button>
+  </template>
+</div>
+</template>
+
+<template x-if="positions.length">
+  <template x-for="p in sorted" :key="p.code">
   <div class="card mb-4">
     <div class="flex justify-between items-start mb-3">
-      <div><span class="text-lg font-semibold">{{ p.name }}</span><span class="text-slate-400 text-sm ml-2">{{ p.code }}</span></div>
-      <div class="text-right"><span class="text-xl font-mono">{{ p.price|floatformat:2 }}</span><div class="text-xs text-slate-400">现价</div></div>
+      <div><span class="text-lg font-semibold" x-text="p.name"></span><span class="text-slate-400 text-sm ml-2" x-text="p.code"></span></div>
+      <div class="text-right"><span class="text-xl font-mono" x-text="p.price.toFixed(2)"></span><div class="text-xs text-slate-400">现价</div></div>
     </div>
     <div class="grid grid-cols-3 gap-3 text-sm mb-3">
-      <div><span class="text-slate-400">持仓</span><br>{{ p.pos_shares }}股 @{{ p.pos_avg|floatformat:2 }}</div>
-      <div><span class="text-slate-400">成本</span><br>{{ p.pos_cost|floatformat:0 }}元</div>
-      <div><span class="text-slate-400">盈亏</span><br><span class="{% if p.pos_pnl >= 0 %}text-green-400{% else %}text-red-400{% endif %} font-bold">{{ p.pos_pnl|floatformat:0 }}元 ({{ p.pos_pnl_pct|floatformat:1 }}%)</span></div>
+      <div><span class="text-slate-400">持仓</span><br><span x-text="p.pos_shares+'股 @'+p.pos_avg"></span></div>
+      <div><span class="text-slate-400">成本</span><br><span x-text="p.pos_cost+'元'"></span></div>
+      <div><span class="text-slate-400">盈亏</span><br><span class="font-bold" :class="p.pos_pnl>=0?'text-green-400':'text-red-400'" x-text="p.pos_pnl+'元 ('+p.pos_pnl_pct+'%)'"></span></div>
     </div>
     <div class="text-xs text-slate-400">
-      评分 {{ p.score }}/100 | 下次加仓触发: {{ p.pos_next_add|floatformat:2 }} | 剩余次数: {{ p.pos_adds_left }}
-      {% if p.pos_trigger_add %}<span class="ml-2 px-1.5 py-0.5 bg-red-500 text-white rounded font-bold">触发加仓</span>{% endif %}
+      <span x-text="'评分 '+p.score+'/100 | 下次加仓: '+p.pos_next_add+' | 剩余: '+p.pos_adds_left"></span>
+      <span x-show="p.pos_trigger_add" class="ml-2 px-1.5 py-0.5 bg-red-500 text-white rounded font-bold">触发加仓</span>
     </div>
   </div>
-  {% endfor %}
-  <div class="card text-center">
-    <span class="text-slate-400">总投入 {{ total_cost|floatformat:0 }}元 | 总盈亏 </span>
-    <span class="font-bold text-xl {% if total_pnl >= 0 %}text-green-400{% else %}text-red-400{% endif %}">{{ total_pnl|floatformat:0 }}元 ({{ total_pnl_pct|floatformat:1 }}%)</span>
-  </div>
-{% else %}
+  </template>
+</template>
+
+<template x-if="!positions.length">
   <div class="card text-center text-slate-400">暂无持仓记录</div>
-{% endif %}
+</template>
+
+<div class="card text-center" x-show="positions.length">
+  <span class="text-slate-400">总投入 {{ total_cost|floatformat:0 }}元 | 总盈亏 </span>
+  <span class="font-bold text-xl {% if total_pnl >= 0 %}text-green-400{% else %}text-red-400{% endif %}">{{ total_pnl|floatformat:0 }}元 ({{ total_pnl_pct|floatformat:1 }}%)</span>
+</div>
 
 <div class="text-center text-xs text-slate-600 mt-6">分析结果仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。</div>
 </div></body></html>

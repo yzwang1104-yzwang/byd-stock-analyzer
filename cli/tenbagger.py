@@ -128,7 +128,13 @@ for f in sorted(os.listdir('.cache')):
             })
     except: pass
 
-results.sort(key=lambda x: x['score'], reverse=True)
+# --sort 参数
+sort_col = 'score'
+if '--sort' in sys.argv:
+    idx = sys.argv.index('--sort')
+    if idx + 1 < len(sys.argv):
+        sort_col = sys.argv[idx + 1]
+results.sort(key=lambda x: x.get(sort_col, 0) or 0, reverse=(sort_col != 'chg_20d'))
 
 print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>7} {"潜力分":>4} {"最低":>7} {"距低":>6} {"20日":>7} {"3日":>6} {"RSI":>5} {"ATR%":>5} {"PE":>6} {"趋":<2}  {"翻倍信号"}')
 print('='*115)

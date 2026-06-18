@@ -7,78 +7,83 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <script src="https://unpkg.com/htmx.org@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3"></script>
   <style>
     .score-red { color: #ef4444; } .score-yellow { color: #eab308; } .score-green { color: #22c55e; }
     .card { background: #1e293b; border-radius: 12px; padding: 1.25rem; }
     body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+    .sort-btn { padding: 2px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid #334155; }
+    .sort-btn.active { background: #2563eb; border-color: #2563eb; color: white; }
   </style>
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" x-data="{
+  sortKey: 'score', sortDir: -1,
+  stocks: {{ stocks_json|safe }},
+  get sorted() {
+    return [...this.stocks].sort((a,b) => {
+      let va = a[this.sortKey], vb = b[this.sortKey];
+      if (va == null) va = 0; if (vb == null) vb = 0;
+      if (typeof va === 'string') return va.localeCompare(vb) * this.sortDir;
+      return (va - vb) * this.sortDir;
+    });
+  },
+  toggle(key) { if (this.sortKey === key) this.sortDir *= -1; else { this.sortKey = key; this.sortDir = -1; } }
+}">
   <div class="max-w-7xl mx-auto px-4 py-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4">
       <h1 class="text-2xl font-bold">买入时机仪表盘</h1>
       <div class="text-sm text-slate-400">
         大盘: {{ market.regime }} | 上证50 {{ market.index_level|floatformat:2 }} | 近5日 {{ market.momentum_5d_pct|floatformat:1 }}%
       </div>
     </div>
 
-    <!-- Stock Cards Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {% for s in stocks %}
-      <div class="card" hx-get="/stock/{{ s.code }}/predict/" hx-trigger="every 60s" hx-swap="outerHTML">
-        <div class="flex justify-between items-start mb-3">
-          <div>
-            <a href="/stock/{{ s.code }}/" class="text-lg font-semibold hover:text-cyan-400">{{ s.name }}</a>
-            <div class="text-xs text-slate-400">{{ s.code }}</div>
-          </div>
-          <div class="text-right">
-            <div class="text-xl font-mono">{{ s.price|floatformat:2 }}</div>
-            {% if s.error %}<div class="text-xs text-red-400">{{ s.error }}</div>{% endif %}
-          </div>
-        </div>
-
-        <!-- Score -->
-        <div class="text-center mb-3">
-          <div class="text-3xl font-bold {% if s.score >= 70 %}score-green{% elif s.score >= 56 %}score-yellow{% else %}score-red{% endif %}">
-            {{ s.score }}
-          </div>
-          <div class="text-xs text-slate-400">/100 — {{ s.action }}</div>
-        </div>
-
-        <!-- Quick Stats -->
-        <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 mb-3">
-          <div>市盈率分位 {{ s.pe_pct|floatformat:0 }}%</div>
-          <div>市净率分位 {{ s.pb_pct|floatformat:0 }}%</div>
-          <div>趋势 {{ s.trend }}</div>
-          <div>方向 {{ s.direction }}</div>
-        </div>
-
-        <!-- Timing -->
-        <div class="text-xs">
-          {% if s.at_buy %}
-            <span class="text-green-400 font-bold">可买入</span>
-          {% else %}
-            <span class="text-yellow-400">距买入 -{{ s.need_pts }}分</span>
-            <div class="text-slate-500 mt-1">{{ s.timing_path }}</div>
-          {% endif %}
-        </div>
-
-        <!-- Position Badge -->
-        {% if s.has_position %}
-        <div class="mt-3 pt-3 border-t border-slate-700 text-xs">
-          <span class="text-slate-400">持仓 {{ s.pos_shares }}股 @{{ s.pos_avg|floatformat:2 }}</span>
-          <span class="{% if s.pos_pnl_pct >= 0 %}text-green-400{% else %}text-red-400{% endif %} ml-2">
-            {{ s.pos_pnl_pct|floatformat:1 }}%
-          </span>
-          {% if s.pos_trigger_add %}<span class="ml-2 px-1.5 py-0.5 bg-red-500 text-white rounded text-xs font-bold">加仓</span>{% endif %}
-        </div>
-        {% endif %}
-      </div>
-      {% endfor %}
+    <!-- Sort Bar -->
+    <div class="flex gap-2 mb-4 text-slate-400 text-xs items-center">
+      <span>排序:</span>
+      <template x-for="[k,label] in [['score','评分'],['price','现价'],['pe_pct','PE分位'],['pb_pct','PB分位'],['rsi','RSI'],['chg_20d','20日涨跌']]" :key="k">
+        <button class="sort-btn" :class="{ active: sortKey===k }" @click="toggle(k)">
+          <span x-text="label"></span>
+          <span x-show="sortKey===k" x-text="sortDir===1?'▲':'▼'"></span>
+        </button>
+      </template>
     </div>
 
-    <!-- Scan Button -->
+    <!-- Stock Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <template x-for="s in sorted" :key="s.code">
+      <div class="card">
+        <div class="flex justify-between items-start mb-3">
+          <div>
+            <a :href="'/stock/'+s.code+'/'" class="text-lg font-semibold hover:text-cyan-400" x-text="s.name"></a>
+            <div class="text-xs text-slate-400" x-text="s.code"></div>
+          </div>
+          <div class="text-right">
+            <div class="text-xl font-mono" x-text="s.price.toFixed(2)"></div>
+            <div x-show="s.error" class="text-xs text-red-400" x-text="s.error"></div>
+          </div>
+        </div>
+
+        <div class="text-center mb-3">
+          <div class="text-3xl font-bold" :class="s.score>=70?'score-green':s.score>=56?'score-yellow':'score-red'" x-text="s.score"></div>
+          <div class="text-xs text-slate-400" x-text="s.action"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 mb-3">
+          <div><span x-text="'PE '+((s.pe_pct||50).toFixed(0))+'%'"></span></div>
+          <div><span x-text="'PB '+((s.pb_pct||50).toFixed(0))+'%'"></span></div>
+          <div><span x-text="s.trend||''"></span></div>
+          <div><span x-text="s.direction||''"></span></div>
+        </div>
+
+        <div class="text-xs" x-show="s.has_position" class="mt-3 pt-3 border-t border-slate-700 text-xs">
+          <span class="text-slate-400" x-text="'持仓 '+s.pos_shares+'股 @'+s.pos_avg"></span>
+          <span :class="s.pos_pnl_pct>=0?'text-green-400':'text-red-400'" class="ml-2" x-text="s.pos_pnl_pct+'%'"></span>
+          <span x-show="s.pos_trigger_add" class="ml-2 px-1.5 py-0.5 bg-red-500 text-white rounded text-xs font-bold">加仓</span>
+        </div>
+      </div>
+      </template>
+    </div>
+
     <div class="text-center">
       <a href="/scan/" class="text-sm text-cyan-400 hover:underline">多股票对比 →</a>
       <span class="mx-3">|</span>
