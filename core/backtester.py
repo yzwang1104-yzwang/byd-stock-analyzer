@@ -133,21 +133,37 @@ def predict_direction(window: list[PriceBar]) -> dict:
         # -0.3~0.3: 中性，MACD 无方向信号
         total_votes += 1
 
-    # 2. RSI(14) — 三级投票：极端(1票) / 偏向(0.5票) / 中性(0票)
+    # 2. RSI(14) — 顺势为主，极端值才逆势（且需趋势确认）
     if len(closes) >= 15:
         rsi = _simple_rsi(closes, 14)
-        if rsi < 30:
-            signals.append(f"RSI超卖({rsi:.0f}) ↑")
-            up_votes += 1
-        elif rsi > 70:
-            signals.append(f"RSI超买({rsi:.0f}) ↓")
-            down_votes += 1
-        elif rsi < 40:
-            signals.append(f"RSI偏低({rsi:.0f}) ↑")
+        ma20_r = sum(closes[-20:])/20 if len(closes)>=20 else current
+        ma50_r = sum(closes[-50:])/50 if len(closes)>=50 else ma20_r
+        in_downtrend = ma20_r < ma50_r
+        in_uptrend = ma20_r > ma50_r
+
+        if rsi < 20 and not in_downtrend:
+            # 极端超卖 + 非下跌趋势 → 反弹概率大
+            signals.append(f"RSI极端超卖({rsi:.0f}) ↑")
+            up_votes += 1.5
+        elif rsi < 20 and in_downtrend:
+            # 极端超卖但趋势向下 → 弱反弹信号
+            signals.append(f"RSI极端超卖({rsi:.0f}) ↑(弱)")
             up_votes += 0.5
-        elif rsi > 60:
-            signals.append(f"RSI偏高({rsi:.0f}) ↓")
+        elif rsi > 80 and not in_uptrend:
+            signals.append(f"RSI极端超买({rsi:.0f}) ↓")
+            down_votes += 1.5
+        elif rsi > 80 and in_uptrend:
+            signals.append(f"RSI极端超买({rsi:.0f}) ↓(弱)")
             down_votes += 0.5
+        elif rsi < 30 and in_uptrend:
+            # 上涨趋势中的超卖 → 加仓机会
+            signals.append(f"RSI超卖+趋势↑({rsi:.0f}) ↑")
+            up_votes += 1
+        elif rsi > 70 and in_downtrend:
+            # 下跌趋势中的超买 → 减仓信号
+            signals.append(f"RSI超买+趋势↓({rsi:.0f}) ↓")
+            down_votes += 1
+        # RSI在30-70之间 → 不投票（中性区扩大）
         total_votes += 1
 
     # 3. MA20 vs MA50 — 交叉1票，位置0.3票
@@ -181,25 +197,32 @@ def predict_direction(window: list[PriceBar]) -> dict:
         elif ma20_t > ma50_t:
             trend_bias = 1.3  # 上涨趋势：增强看涨信号权重
 
-    # 4. 布林带位置 — 趋势过滤
+    # 4. 布林带位置 — 顺势操作，不逆势抄底
     if len(closes) >= 20:
         ma20 = sum(closes[-20:]) / 20
         stdev = statistics.stdev(closes[-20:])
         upper = ma20 + 2 * stdev
         lower = ma20 - 2 * stdev
         position = (current - lower) / (upper - lower) if (upper - lower) > 0 else 0.5
-        if position < 0.1:
-            signals.append("触下轨 ↑")
+        in_downtrend_bb = len(closes)>=50 and (sum(closes[-20:])/20) < (sum(closes[-50:])/50)
+
+        if position < 0.1 and not in_downtrend_bb:
+            signals.append("触下轨+非跌势 ↑")
             up_votes += 1
-        elif position > 0.9:
-            signals.append("触上轨 ↓")
+        elif position > 0.9 and in_downtrend_bb:
+            # 下跌趋势反弹至上轨 → 可能继续跌
+            signals.append("触上轨+跌势 ↓")
             down_votes += 1
-        elif position < 0.25:
-            signals.append("近下轨 ↑")
-            up_votes += 0.5
-        elif position > 0.75:
+        elif position < 0.15 and in_downtrend_bb:
+            # 跌势中触下轨 → 不投（可能是飞刀）
+            signals.append("跌势触下轨(观望)")
+            # no vote
+        elif position > 0.85:
             signals.append("近上轨 ↓")
             down_votes += 0.5
+        elif position < 0.2:
+            signals.append("近下轨 ↑")
+            up_votes += 0.5
         total_votes += 1
 
     # 5. 量价关系 — 只有显著放量才投票
@@ -254,13 +277,14 @@ def predict_direction(window: list[PriceBar]) -> dict:
     # 置信度基于票差比例
     confidence = round(min(abs(margin) / total_weight * 200, 100))
 
-    if margin >= 0.3:
+    # 严格阈值：至少1票净优势才判方向（提高准确率）
+    if margin >= 1.0:
         direction = "up"
-    elif margin <= -0.3:
+    elif margin <= -1.0:
         direction = "down"
     else:
         direction = "flat"
-        confidence = min(confidence, 50)
+        confidence = min(confidence, 40)  # 不确定时压低置信
 
     return {"direction": direction, "confidence": confidence, "signals": signals}
 
