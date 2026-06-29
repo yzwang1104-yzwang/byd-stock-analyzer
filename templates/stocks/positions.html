@@ -23,7 +23,7 @@
 <template x-if="positions.length">
 <div class="flex gap-2 mb-4 text-slate-400 text-xs items-center">
   <span>排序:</span>
-  <template x-for="[k,label] in [['score','评分'],['price','现价'],['pos_pnl_pct','盈亏%'],['pe_pct','PE分位'],['rsi','RSI']]" :key="k">
+  <template x-for="[k,label] in [['score','评分'],['price','现价'],['pos_pnl_pct','盈亏%'],['pe_pct','PE分位'],['rsi','RSI'],['from_low','距低'],['from_high','距高']]" :key="k">
     <button class="sort-btn" :class="{ active: sortKey===k }" @click="toggle(k)">
       <span x-text="label"></span>
       <span x-show="sortKey===k" x-text="sortDir===1?'▲':'▼'"></span>
@@ -45,8 +45,9 @@
       <div><span class="text-slate-400">盈亏</span><br><span class="font-bold" :class="p.pos_pnl>=0?'text-green-400':'text-red-400'" x-text="p.pos_pnl+'元 ('+p.pos_pnl_pct+'%)'"></span></div>
     </div>
     <div class="text-xs text-slate-400">
-      <span x-text="'评分 '+p.score+'/100 | 下次加仓: '+p.pos_next_add+' | 剩余: '+p.pos_adds_left"></span>
+      <span x-text="'评分 '+p.score+'/100 | 加仓: '+p.pos_next_add+' | 剩余: '+p.pos_adds_left"></span>
       <span x-show="p.pos_trigger_add" class="ml-2 px-1.5 py-0.5 bg-red-500 text-white rounded font-bold">触发加仓</span>
+      <br><span x-text="'距历史最低 +'+(p.from_low||0).toFixed(0)+'% | 距历史最高 '+(p.from_high||0).toFixed(0)+'%'"></span>
     </div>
   </div>
   </template>

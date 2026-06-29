@@ -106,6 +106,7 @@ def _run_analysis(code: str) -> dict:
         sys.stdout = old
 
     closes = [p.close for p in data.prices[-100:]]
+    all_closes = [p.close for p in data.prices]
     dates = [p.date.isoformat() for p in data.prices[-100:]]
 
     return {
@@ -145,6 +146,11 @@ def _run_analysis(code: str) -> dict:
         "boll_lower_series": json.dumps(_calc_boll(closes, 20, 2)[2]),
         "cal_bias": cal.get("bias_correction", 0),
         "cal_range": cal.get("range_multiplier", 1),
+        # 历史最低/最高（永久字段——基于全部历史数据）
+        "low_all": round(min(all_closes), 2) if all_closes else 0,
+        "from_low": round((data.latest_price - min(all_closes)) / min(all_closes) * 100, 1) if all_closes else 0,
+        "high_all": round(max(all_closes), 2) if all_closes else 0,
+        "from_high": round((data.latest_price / max(all_closes) - 1) * 100, 1) if all_closes else 0,
     }
 
 

@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "byd-stock-analyzer"
@@ -39,6 +39,9 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "cli*", "apps*", "config*", "utils*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -40,7 +40,7 @@
     <!-- Sort Bar -->
     <div class="flex gap-2 mb-4 text-slate-400 text-xs items-center">
       <span>排序:</span>
-      <template x-for="[k,label] in [['score','评分'],['price','现价'],['pe_pct','PE分位'],['pb_pct','PB分位'],['rsi','RSI'],['chg_20d','20日涨跌']]" :key="k">
+      <template x-for="[k,label] in [['score','评分'],['price','现价'],['pe_pct','PE分位'],['pb_pct','PB分位'],['rsi','RSI'],['chg_20d','20日涨跌'],['from_low','距低'],['from_high','距高']]" :key="k">
         <button class="sort-btn" :class="{ active: sortKey===k }" @click="toggle(k)">
           <span x-text="label"></span>
           <span x-show="sortKey===k" x-text="sortDir===1?'▲':'▼'"></span>
@@ -71,6 +71,8 @@
         <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 mb-3">
           <div><span x-text="'PE '+((s.pe_pct||50).toFixed(0))+'%'"></span></div>
           <div><span x-text="'PB '+((s.pb_pct||50).toFixed(0))+'%'"></span></div>
+          <div><span x-text="'距低 +'+(s.from_low||0).toFixed(0)+'%'"></span></div>
+          <div><span x-text="'距高 '+(s.from_high||0).toFixed(0)+'%'"></span></div>
           <div><span x-text="s.trend||''"></span></div>
           <div><span x-text="s.direction||''"></span></div>
         </div>

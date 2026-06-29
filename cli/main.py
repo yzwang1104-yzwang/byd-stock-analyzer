@@ -801,6 +801,11 @@ def scan(
             sys.stdout = _saved
 
         if status == "OK" and advice:
+            closes = [p.close for p in data.prices]
+            low_all = min(closes) if closes else 0
+            high_all = max(closes) if closes else 0
+            from_low = (data.latest_price - low_all) / low_all * 100 if low_all else 0
+            from_high = (data.latest_price / high_all - 1) * 100 if high_all else 0
             results.append({
                 "code": code,
                 "price": data.latest_price,
@@ -811,6 +816,10 @@ def scan(
                 "pb_pct": result.pb_percentile,
                 "trend": _trend_label(result.trend),
                 "rsi": result.rsi_14,
+                "low_all": low_all,
+                "from_low": from_low,
+                "high_all": high_all,
+                "from_high": from_high,
             })
         else:
             results.append({"code": code, "price": 0, "score": 0, "action": "数据失败", "direction": "?", "pe_pct": None, "pb_pct": None, "trend": "?", "rsi": None, "error": status})
@@ -824,6 +833,8 @@ def scan(
     table.add_column("方向", justify="center")
     table.add_column("市盈率(PE)分位", justify="right")
     table.add_column("市净率(PB)分位", justify="right")
+    table.add_column("距最低", justify="right")
+    table.add_column("距最高", justify="right")
     table.add_column("趋势", justify="center")
 
     for r in results:
@@ -831,6 +842,8 @@ def scan(
         dir_label = {"up": "↑", "down": "↓", "flat": "→"}.get(r["direction"], "?")
         pe_str = f'{r["pe_pct"]:.0f}% {_valuation_label(r["pe_pct"])}' if r["pe_pct"] is not None else "暂无"
         pb_str = f'{r["pb_pct"]:.0f}% {_valuation_label(r["pb_pct"])}' if r["pb_pct"] is not None else "暂无"
+        flo_str = f'+{r["from_low"]:.0f}%' if r.get("from_low", 0) > 5 else f'‼️+{r["from_low"]:.0f}%'
+        fhi_str = f'{r["from_high"]:.0f}%'
         table.add_row(
             r["code"],
             f'{r["price"]:.2f}',
@@ -839,6 +852,8 @@ def scan(
             dir_label,
             pe_str,
             pb_str,
+            flo_str,
+            fhi_str,
             r["trend"],
         )
     console.print(table)
@@ -870,6 +885,8 @@ def dashboard() -> None:
     table.add_column("现价", justify="right")
     table.add_column("评分", justify="center")
     table.add_column("距买入", justify="center")
+    table.add_column("距最低", justify="right")
+    table.add_column("距最高", justify="right")
     table.add_column("最快路径", justify="left")
     table.add_column("持仓", justify="right")
 
@@ -911,10 +928,21 @@ def dashboard() -> None:
         need_str = "[green]可买入[/green]" if timing["at_buy"] else f"[yellow]-{timing['need_pts']}分[/yellow]"
         score_color = "green" if sr.score >= 70 else ("yellow" if sr.score >= 56 else "red")
 
+        closes = [p.close for p in data.prices]
+        low_all = min(closes) if closes else 0
+        high_all = max(closes) if closes else 0
+        from_low = (data.latest_price - low_all) / low_all * 100 if low_all else 0
+        from_high = (data.latest_price / high_all - 1) * 100 if high_all else 0
+        flo_str = f'+{from_low:.0f}%' if from_low > 5 else f'‼️+{from_low:.0f}%'
+        fhi_str = f'{from_high:.0f}%'
+
         table.add_row(
             code, f"{data.latest_price:.2f}",
             f"[{score_color}]{sr.score}[/{score_color}]",
-            need_str, best_path, pos_str or "—",
+            need_str,
+            flo_str,
+            fhi_str,
+            best_path, pos_str or "—",
         )
 
     console.print(table)

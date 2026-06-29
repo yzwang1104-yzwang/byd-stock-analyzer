@@ -122,9 +122,11 @@ def analyze_stock(code):
         elif ma20 < ma50 * 0.99: trend = 'down'
         else: trend = 'sideways'
 
-        # Historical low
+        # Historical low & high
         low_all = np.min(closes)
+        high_all = np.max(closes)
         from_low = (cur - low_all) / low_all * 100
+        from_high = (cur / high_all - 1) * 100
 
         # Chg 20d, 5d, 3d
         chg_20d = (cur - closes[-21]) / closes[-21] * 100 if len(closes) >= 21 else 0
@@ -211,6 +213,7 @@ def analyze_stock(code):
             'momentum_accel': momentum_accel,
             'falling_knife': falling_knife,
             'low_all': low_all, 'from_low': from_low,
+            'high_all': high_all, 'from_high': from_high,
             'signals': '; '.join(signals) if signals else '无特殊信号',
         }
     except Exception as e:
@@ -236,9 +239,9 @@ if '--sort' in sys.argv:
         sort_col = sys.argv[idx + 1]
 results.sort(key=lambda x: x.get(sort_col, 0) or 0, reverse=(sort_col != 'chg_20d' and sort_col != 'chg_3d'))
 
-print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"最低":>7} {"距低":>6} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"3日":>6} {"20日":>6}  {"信号"}')
-print(f'{"="*110}')
-for i, r in enumerate(results[:20]):
+print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>8} {"评分":>4} {"最低":>7} {"距低":>6} {"最高":>7} {"距高":>6} {"RSI":>5} {"PE%":>5} {"PB%":>5} {"趋势":<4} {"3日":>6} {"20日":>6}  {"信号"}')
+print(f'{"="*125}')
+for i, r in enumerate(results[:40]):
     name = STOCK_NAMES.get(r['code'], '?')[:8]
     trend_icon = '↑' if r['trend']=='up' else ('↓' if r['trend']=='down' else '→')
     knife = '⚠️' if r.get('falling_knife') else '  '
@@ -247,10 +250,13 @@ for i, r in enumerate(results[:20]):
     sig = r['signals']
     lo = r.get('low_all', 0)
     flo = r.get('from_low', 0)
+    hi = r.get('high_all', 0)
+    fhi = r.get('from_high', 0)
     flo_str = f'+{flo:.0f}%' if flo > 5 else f'‼️+{flo:.0f}%'
-    print(f'{knife}{i+1:<3} {r["code"]:<8} {name:<8} {r["price"]:>8.2f} {r["score"]:>4.0f} {lo:>7.2f} {flo_str:>6} {r["rsi"]:>5.0f} {r["pe_pct"]:>5.0f} {r["pb_pct"]:>5.0f} {trend_icon:<4} {chg3:>+5.0f}% {chg20:>+5.0f}%  {sig}')
+    fhi_str = f'{fhi:.0f}%' if fhi > -30 else f'‼️{fhi:.0f}%'
+    print(f'{knife}{i+1:<3} {r["code"]:<8} {name:<8} {r["price"]:>8.2f} {r["score"]:>4.0f} {lo:>7.2f} {flo_str:>6} {hi:>7.2f} {fhi_str:>6} {r["rsi"]:>5.0f} {r["pe_pct"]:>5.0f} {r["pb_pct"]:>5.0f} {trend_icon:<4} {chg3:>+5.0f}% {chg20:>+5.0f}%  {sig}')
 
-print(f'\n{"="*75}')
+print(f'\n{"="*90}')
 hi = sum(1 for r in results if r['score']>=70)
 mid = sum(1 for r in results if 55<=r['score']<70)
 lo = sum(1 for r in results if r['score']<55)

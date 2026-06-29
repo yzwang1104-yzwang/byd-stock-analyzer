@@ -61,6 +61,12 @@ def analyze_stock(code):
     close = df["close"]
     latest_price = close.iloc[-1]
 
+    # Historical low & high
+    low_all = float(close.min())
+    high_all = float(close.max())
+    from_low = (latest_price - low_all) / low_all * 100
+    from_high = (latest_price / high_all - 1) * 100
+
     # --- 技术指标 ---
     ma20 = close.rolling(20).mean().iloc[-1]
     ma50 = close.rolling(50).mean().iloc[-1]
@@ -182,6 +188,10 @@ def analyze_stock(code):
         "trend": trend,
         "macd_gap": round(macd_gap, 4),
         "chg_20d": round(chg_20d, 1),
+        "low_all": round(low_all, 2),
+        "from_low": round(from_low, 1),
+        "high_all": round(high_all, 2),
+        "from_high": round(from_high, 1),
         "signals": "; ".join(signals) if signals else "无特殊信号",
     }
 
@@ -222,6 +232,8 @@ def run():
     table.add_column("RSI", justify="right", width=6)
     table.add_column("PE%", justify="right", width=6)
     table.add_column("PB%", justify="right", width=6)
+    table.add_column("距低", justify="right", width=6)
+    table.add_column("距高", justify="right", width=6)
     table.add_column("趋势", width=6)
     table.add_column("信号", width=30)
 
@@ -230,6 +242,8 @@ def run():
         pe_label = f"{r['pe_pct']:.0f}%" if r["pe_pct"] is not None else "-"
         pb_label = f"{r['pb_pct']:.0f}%" if r["pb_pct"] is not None else "-"
         rsi_str = f"{r['rsi']:.0f}" if r["rsi"] is not None else "-"
+        from_low_str = f"+{r['from_low']:.0f}%" if r.get('from_low', 0) > 5 else f"‼️+{r['from_low']:.0f}%"
+        from_high_str = f"{r['from_high']:.0f}%"
         trend_icon = "UP" if r["trend"] == "up" else ("DOWN" if r["trend"] == "down" else "SIDE")
         table.add_row(
             str(i + 1),
@@ -240,6 +254,8 @@ def run():
             rsi_str,
             pe_label,
             pb_label,
+            from_low_str,
+            from_high_str,
             trend_icon,
             r["signals"],
         )
@@ -260,7 +276,7 @@ def run():
     for i, r in enumerate(results[:5]):
         console.print(f"  [bold cyan]#{i+1} {r['code']} {r['name']}[/bold cyan] — 评分 {r['score']:.0f}/100")
         console.print(f"    现价: {r['price']:.2f}元 | RSI: {r['rsi']:.0f} | PE分位: {pe_str(r)} | PB分位: {pb_str(r)} | 趋势: {r['trend']}")
-        console.print(f"    20日涨跌: {r['chg_20d']:+.1f}% | MACD差距: {r['macd_gap']:.4f}")
+        console.print(f"    20日涨跌: {r['chg_20d']:+.1f}% | MACD差距: {r['macd_gap']:.4f} | 距最低: +{r.get('from_low',0):.0f}% | 距最高: {r.get('from_high',0):.0f}%")
         console.print(f"    信号: {r['signals']}")
         console.print()
 

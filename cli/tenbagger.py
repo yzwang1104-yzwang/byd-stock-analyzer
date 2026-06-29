@@ -52,9 +52,11 @@ for f in sorted(os.listdir('.cache')):
             if 'current_pe' in vdf.columns:
                 pe = float(vdf['current_pe'].iloc[-1]) if len(vdf)>0 else 0
 
-        # Historical low
+        # Historical low & high
         low_all = min(closes)
+        high_all = max(closes)
         from_low = (cur - low_all) / low_all * 100  # 距历史最低的涨幅
+        from_high = (cur / high_all - 1) * 100     # 距历史最高的跌幅
 
         # Changes
         chg_20d = (cur-closes[-21])/closes[-21]*100 if len(closes)>=21 else 0
@@ -125,6 +127,7 @@ for f in sorted(os.listdir('.cache')):
                 'rsi':rsi,'atr_pct':atr_pct,'pe':pe,
                 'trend':trend,'reversal':reversal,'today':td,
                 'low_all':low_all,'from_low':from_low,
+                'high_all':high_all,'from_high':from_high,
             })
     except: pass
 
@@ -136,8 +139,8 @@ if '--sort' in sys.argv:
         sort_col = sys.argv[idx + 1]
 results.sort(key=lambda x: x.get(sort_col, 0) or 0, reverse=(sort_col != 'chg_20d'))
 
-print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>7} {"潜力分":>4} {"最低":>7} {"距低":>6} {"20日":>7} {"3日":>6} {"RSI":>5} {"ATR%":>5} {"PE":>6} {"趋":<2}  {"翻倍信号"}')
-print('='*115)
+print(f'{"#":<3} {"代码":<8} {"名称":<8} {"现价":>7} {"潜力分":>4} {"最低":>7} {"距低":>6} {"最高":>7} {"距高":>6} {"20日":>7} {"3日":>6} {"RSI":>5} {"ATR%":>5} {"PE":>6} {"趋":<2}  {"翻倍信号"}')
+print('='*130)
 for i, r in enumerate(results[:25]):
     t = '↑' if r['trend']=='↑' else ('↓' if r['trend']=='↓' else '→')
     rev = '🔄' if r['reversal'] else ''
@@ -151,7 +154,8 @@ for i, r in enumerate(results[:25]):
     if 0 < r['pe'] < 15: sig.append('💰低PE')
     sig_str = ' '.join(sig)
     from_low_str = f'+{r["from_low"]:.0f}%' if r['from_low'] > 5 else f'‼️+{r["from_low"]:.0f}%'
-    print(f'{i+1:<3} {r["code"]:<8} {r["name"]:<8} {r["price"]:>7.2f} {r["score"]:>4.0f} {r["low_all"]:>7.2f} {from_low_str:>6} {r["chg_20d"]:>+6.0f}% {r["chg_3d"]:>+5.0f}% {r["rsi"]:>5.0f} {r["atr_pct"]:>4.1f}% {r["pe"]:>6.0f} {t:<2}  {sig_str} {rev} {td_str}')
+    from_high_str = f'{r["from_high"]:.0f}%' if r['from_high'] > -30 else f'‼️{r["from_high"]:.0f}%'
+    print(f'{i+1:<3} {r["code"]:<8} {r["name"]:<8} {r["price"]:>7.2f} {r["score"]:>4.0f} {r["low_all"]:>7.2f} {from_low_str:>6} {r["high_all"]:>7.2f} {from_high_str:>6} {r["chg_20d"]:>+6.0f}% {r["chg_3d"]:>+5.0f}% {r["rsi"]:>5.0f} {r["atr_pct"]:>4.1f}% {r["pe"]:>6.0f} {t:<2}  {sig_str} {rev} {td_str}')
 
-print(f'\n{'='*100}')
+print(f'\n{"="*100}')
 print(f'共{len(results)}只有翻倍潜力 | 评分=超跌幅度+波动爆发力+反转信号+PE安全垫')

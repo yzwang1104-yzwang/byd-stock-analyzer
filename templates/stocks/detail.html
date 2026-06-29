@@ -42,6 +42,8 @@
       <div class="card text-center"><div class="text-xs text-slate-400">市净率分位</div><div class="text-xl">{{ stock.pb_pct|floatformat:0 }}%</div></div>
       <div class="card text-center"><div class="text-xs text-slate-400">RSI(14)</div><div class="text-xl">{{ stock.rsi|floatformat:1 }}</div></div>
       <div class="card text-center"><div class="text-xs text-slate-400">MACD</div><div class="text-xl">{{ stock.macd|floatformat:3 }}</div></div>
+      <div class="card text-center"><div class="text-xs text-slate-400">距历史最低</div><div class="text-xl {% if stock.from_low < 5 %}text-orange-400{% endif %}">+{{ stock.from_low|floatformat:0 }}%</div></div>
+      <div class="card text-center"><div class="text-xs text-slate-400">距历史最高</div><div class="text-xl {% if stock.from_high < -50 %}text-red-400{% endif %}">{{ stock.from_high|floatformat:0 }}%</div></div>
     </div>
 
     <!-- Direction + Timing -->
