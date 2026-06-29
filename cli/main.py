@@ -546,7 +546,7 @@ def _auto_backfill(stock: str, current_price: float) -> None:
     records_file = _Path(".prediction_history") / f"predictions_{stock}.json"
     if not records_file.exists():
         return
-    records = _json.loads(records_file.read_text())
+    records = _json.loads(records_file.read_text(encoding="utf-8"))
     now = _dt.now()
     backfilled = 0
     for r in records:
