@@ -87,7 +87,7 @@ class TestBackfillTypePreserved:
 
     def test_auto_backfill_marked_correctly(self):
         """auto回填的 backfill_type 必须是 'auto'。"""
-        from core.prediction_tracker import backfill_actual
+        from core.prediction_tracker import backfill_actual, FileLock
 
         records = _make_records([
             {"current_price": 90, "predicted_close": 91},
@@ -95,13 +95,16 @@ class TestBackfillTypePreserved:
             {"current_price": 90, "predicted_close": 90.5},
         ])
 
-        with mock.patch("core.prediction_tracker._load_records", return_value=records):
-            with mock.patch("core.prediction_tracker._save_records") as mock_save:
-                n = backfill_actual("002594", 91.0, fill_type="auto")
+        with mock.patch("core.prediction_tracker._load_records_safe", return_value=records):
+            with mock.patch("core.prediction_tracker._atomic_write_with_backup") as mock_write:
+                with mock.patch.object(FileLock, "__enter__", return_value=None):
+                    with mock.patch.object(FileLock, "__exit__", return_value=None):
+                        n = backfill_actual("002594", 91.0, fill_type="auto",
+                                           min_age_minutes=0)
 
         assert n == 3, "应回填3条"
         # 验证保存的记录
-        saved_records = mock_save.call_args[0][1]
+        saved_records = mock_write.call_args[0][1]
         for r in saved_records:
             assert r["backfill_type"] == "auto", \
                 f"auto回填的 backfill_type 应为 'auto'，实际 {r.get('backfill_type')}"

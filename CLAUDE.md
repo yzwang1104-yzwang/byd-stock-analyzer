@@ -1337,11 +1337,20 @@ Cron: 12个在线 | 股票池: 1,019只 | 买入提醒: 64只触发
 | 09:05 | 安装 skill-creator 插件 |
 | 09:10 | /diagram 生成 BYD 架构图（.mmd + .svg + .excalidraw）|
 | 09:15 | 修复 /diagram 中文乱码：decodeURIComponent(escape(atob(...))) |
+| 09:17 | 11步循环执行 — 比亚迪 77.50 评分 51/WAIT |
+| 09:17 | **发现 Claude CLI 崩溃** — claude.exe 不存在，只有 .old |
+| 09:19 | **修复 Claude CLI** — 从 .old 恢复 → 全局新版覆盖 → v2.1.195 |
+| 09:20 | **根因分析**：历史崩溃 = 并发写入竞争（12个Cron + 手动命令） |
+| 09:25 | **模拟验证**：50线程无锁并发 → 丢失 99.5% 数据 |
+| 09:30 | **永久修复**：prediction_tracker.py 线程安全重构 |
+| 09:35 | 28/28 测试通过 + 11步循环验证通过 |
+| 09:36 | TOP40 买入推荐扫描 — 767只强烈买入，长江电力#1(100分) |
 
 ### 今日 Commits
 
 ```
 f9571bb feat: permanently add historical low/high fields to ALL tools
+(待提交) fix: thread-safe prediction tracker — file lock + atomic write + auto-recovery
 ```
 
 ### 核心改动 1：历史最低/最高字段永久化
@@ -1385,6 +1394,60 @@ decodeURIComponent(escape(atob('$(base64 < source.mmd)')))
 ```
 
 此规则写入 /diagram 操作记忆，以后所有中文图表自动应用。
+
+### 核心改动 4：Claude CLI 路径修复
+
+**根因：** 2026-06-29 08:40 Claude Code 自动更新中断。更新器将旧 `claude.exe` → `claude.exe.old`，新版本写入失败。PATH 中 `C:\Users\Administrator\nodejs\` 优先级高，指向不存在的 exe，报错 `CommandNotFoundException`。
+
+**修复：**
+1. 从 `.old` 文件恢复 → `claude.exe`（临时恢复）
+2. 从全局 npm (`AppData/Roaming/npm`) 复制最新版 v2.1.195 → 覆盖本地 `nodejs` 安装
+3. 验证：`claude --version` → `2.1.195 (Claude Code)`
+
+**永久防护：** 以后更新中断时，用 `.old` 恢复，然后 `npm update -g @anthropic-ai/claude-code`。
+
+### 核心改动 5：历史崩溃永久修复（prediction_tracker.py 线程安全重构）
+
+**根因：** 12个 Cron 任务 + 手动 predict 命令同时读写同一个 JSON 文件，无任何并发保护。
+
+**模拟验证：** 50线程无锁并发写入 → 期望 5000 条，实际 27 条，**丢失 99.5%**。
+
+**修复方案（5层防护）：**
+
+| 层级 | 机制 | 实现 |
+|:--:|------|------|
+| 1 | **文件锁** | `FileLock` 类 — `os.O_CREAT \| O_EXCL` 原子创建 lock file，超时 10s，过期锁自动清理 |
+| 2 | **原子写入** | temp file + `os.replace()` — POSIX/Windows 原子替换，避免半写损坏 |
+| 3 | **自动备份** | 每次写入前 `.json` → `.json.bak`，损坏时从 .bak 自动恢复 |
+| 4 | **编码兼容** | `_try_decode()` — UTF-8 → GBK 双编码兼容（旧文件 GBK，新文件 UTF-8） |
+| 5 | **自动归档** | >60 天记录 → `.archive.json`，防止文件无限增长 |
+
+**关键 API 线程安全保证：**
+- `record_prediction()` — 整个「读取→追加→写入」在锁内完成
+- `backfill_actual()` — 整个「读取→修改→写入」在锁内完成
+- 5线程×30次并发写入 → **150/150 条，0 丢失，0 重复**
+
+**验证：** 28/28 测试全部通过，11步改进循环正常运行。
+
+**改动文件：**
+| 文件 | 改动 |
+|------|------|
+| `core/prediction_tracker.py` | +150行：FileLock类 + 原子写入 + 自动恢复 + 编码兼容 + 归档 |
+| `cli/improvement_loop.py` | step2_backfill 用线程安全 API 替代裸 JSON 读写 |
+| `tests/test_prediction_tracker.py` | mock 更新适配新 API |
+
+### 今日 TOP40 买入推荐 (09:36)
+
+```
+#1  长江电力 26.70 100分 RSI33 PE3% PB14% 趋势↑
+#2  国投电力 13.08 100分 RSI27 PE1% PB0%  趋势↑
+#3  联影医疗 104.50 98分 RSI24 PE3% PB0% 距高-34%
+#4  歌尔股份 23.91  98分 RSI31 PE3% PB7%  趋势↑
+#5  中国移动 91.63  97分 RSI26 PE35%PB0%  趋势↑
+#31 上汽集团  9.73  87分 RSI4  创历史新低！距高-54%
+```
+
+全市场 2,016只 | 🔥≥70: 767(38%) — 恐慌中便宜货最多
 
 ### 安装的工具生态
 
@@ -1438,13 +1501,17 @@ C:\Users\Administrator\byd-stock-analyzer\.venv\
 2. **新建工具优先调用 `core/quick_analyzer.py`** 而非内联分析逻辑
 3. **`/diagram` 中文图必须用 `decodeURIComponent(escape(atob(...)))`** 编码，不用裸 `atob()`
 4. **Claude Code CLI 更新中断时**，`.old` 文件可直接改回 `.exe` 恢复
+5. **所有 JSON 持久化必须通过 `core/prediction_tracker.py`** — 它提供文件锁+原子写入+自动恢复。禁止直接 `json.dump` 到预测文件。
+6. **并发写入场景必须用 `FileLock`**（`from core.prediction_tracker import FileLock`）
+7. **读取 JSON 文件必须用 `_try_decode()`** 或 `_load_records_safe()` — 兼容 GBK 旧文件
 
 ### 待办
 
 - [ ] claude-mem 重启后重装（thethedotmack 目录文件锁）
-- [ ] 比亚迪到 76 以下考虑建仓（RSI 25 + PB 0.55% 极度便宜 + 跌破布林下轨）
-- [ ] 上汽趋势翻↑确认后加仓（RSI 4 极端，距最高 -53%）
+- [ ] 比亚迪到 76 以下考虑建仓（现价 78.58，RSI 25 + PB 1% 极度便宜）
+- [ ] 上汽趋势翻↑确认后加仓（RSI 4 极端，创历史新低 9.73）
 - [ ] 国电电力 4.71 持仓跟踪，评分 95 最高级别
 - [ ] /diagram 路径下的 `.mmd`/`.excalidraw` 文件加入 git
+- [ ] history fix commit + push
 
-**最后更新:** 2026-06-29 09:20 CST
+**最后更新:** 2026-06-29 09:40 CST

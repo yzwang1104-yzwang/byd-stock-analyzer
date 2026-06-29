@@ -116,28 +116,9 @@ def step1_fetch(stock: str = "002594") -> dict:
 
 
 def step2_backfill(stock: str, current_price: float) -> int:
-    """步骤2: 回写记录——自动回填超过30分钟的旧预测。"""
-    records_file = HISTORY_DIR / f"predictions_{stock}.json"
-    if not records_file.exists():
-        return 0
-    records = json.loads(records_file.read_text())
-    now = datetime.now()
-    backfilled = 0
-    for r in records:
-        if r.get("actual_close"):
-            continue
-        try:
-            ts = datetime.fromisoformat(r["timestamp"])
-        except (ValueError, KeyError):
-            continue
-        if now - ts > timedelta(minutes=30):
-            r["actual_close"] = round(current_price, 2)
-            r["error"] = round(current_price - float(r["predicted_close"]), 2)
-            r["backfill_type"] = "auto"
-            backfilled += 1
-    if backfilled:
-        records_file.write_text(json.dumps(records, ensure_ascii=False, indent=2))
-    return backfilled
+    """步骤2: 回写记录——使用线程安全的 prediction_tracker API。"""
+    from core.prediction_tracker import backfill_actual
+    return backfill_actual(stock, current_price, fill_type="auto")
 
 
 def step3_compare() -> dict:
