@@ -232,7 +232,9 @@ def run():
     table.add_column("RSI", justify="right", width=6)
     table.add_column("PE%", justify="right", width=6)
     table.add_column("PB%", justify="right", width=6)
+    table.add_column("最低", justify="right", width=7)
     table.add_column("距低", justify="right", width=6)
+    table.add_column("最高", justify="right", width=7)
     table.add_column("距高", justify="right", width=6)
     table.add_column("趋势", width=6)
     table.add_column("信号", width=30)
@@ -242,8 +244,10 @@ def run():
         pe_label = f"{r['pe_pct']:.0f}%" if r["pe_pct"] is not None else "-"
         pb_label = f"{r['pb_pct']:.0f}%" if r["pb_pct"] is not None else "-"
         rsi_str = f"{r['rsi']:.0f}" if r["rsi"] is not None else "-"
-        from_low_str = f"+{r['from_low']:.0f}%" if r.get('from_low', 0) > 5 else f"‼️+{r['from_low']:.0f}%"
-        from_high_str = f"{r['from_high']:.0f}%"
+        low_str = f"{r.get('low_all', 0):.2f}"
+        flo_str = f"+{r['from_low']:.0f}%" if r.get('from_low', 0) > 5 else f"‼️+{r['from_low']:.0f}%"
+        high_str = f"{r.get('high_all', 0):.2f}"
+        fhi_str = f"{r['from_high']:.0f}%"
         trend_icon = "UP" if r["trend"] == "up" else ("DOWN" if r["trend"] == "down" else "SIDE")
         table.add_row(
             str(i + 1),
@@ -254,8 +258,10 @@ def run():
             rsi_str,
             pe_label,
             pb_label,
-            from_low_str,
-            from_high_str,
+            low_str,
+            flo_str,
+            high_str,
+            fhi_str,
             trend_icon,
             r["signals"],
         )
@@ -276,7 +282,7 @@ def run():
     for i, r in enumerate(results[:5]):
         console.print(f"  [bold cyan]#{i+1} {r['code']} {r['name']}[/bold cyan] — 评分 {r['score']:.0f}/100")
         console.print(f"    现价: {r['price']:.2f}元 | RSI: {r['rsi']:.0f} | PE分位: {pe_str(r)} | PB分位: {pb_str(r)} | 趋势: {r['trend']}")
-        console.print(f"    20日涨跌: {r['chg_20d']:+.1f}% | MACD差距: {r['macd_gap']:.4f} | 距最低: +{r.get('from_low',0):.0f}% | 距最高: {r.get('from_high',0):.0f}%")
+        console.print(f"    20日涨跌: {r['chg_20d']:+.1f}% | MACD差距: {r['macd_gap']:.4f} | 最低: {r.get('low_all',0):.2f} | 距低: +{r.get('from_low',0):.0f}% | 最高: {r.get('high_all',0):.2f} | 距高: {r.get('from_high',0):.0f}%")
         console.print(f"    信号: {r['signals']}")
         console.print()
 

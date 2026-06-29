@@ -42,8 +42,8 @@
 <td class="p-2" x-text="s.direction"></td>
 <td class="p-2 text-right" x-text="(s.pe_pct||50).toFixed(0)+'%'"></td>
 <td class="p-2 text-right" x-text="(s.pb_pct||50).toFixed(0)+'%'"></td>
-<td class="p-2 text-right" :class="s.from_low<5?'text-orange-400':''" x-text="(s.from_low||0).toFixed(0)+'%'"></td>
-<td class="p-2 text-right" :class="s.from_high<-50?'text-red-400':''" x-text="(s.from_high||0).toFixed(0)+'%'"></td>
+<td class="p-2 text-right" :class="s.from_low<5?'text-orange-400':''"><span class="text-slate-400" x-text="(s.low_all||0).toFixed(2)"></span> <span x-text="(s.from_low||0).toFixed(0)+'%'"></span></td>
+<td class="p-2 text-right" :class="s.from_high<-50?'text-red-400':''"><span class="text-slate-400" x-text="(s.high_all||0).toFixed(2)"></span> <span x-text="(s.from_high||0).toFixed(0)+'%'"></span></td>
 <td class="p-2" x-text="s.trend||''"></td></tr>
 </template></tbody></table></div>
 <div class="text-center text-xs text-slate-600 mt-6">分析结果仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。</div>

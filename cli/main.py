@@ -833,8 +833,10 @@ def scan(
     table.add_column("方向", justify="center")
     table.add_column("市盈率(PE)分位", justify="right")
     table.add_column("市净率(PB)分位", justify="right")
-    table.add_column("距最低", justify="right")
-    table.add_column("距最高", justify="right")
+    table.add_column("最低", justify="right")
+    table.add_column("距低", justify="right")
+    table.add_column("最高", justify="right")
+    table.add_column("距高", justify="right")
     table.add_column("趋势", justify="center")
 
     for r in results:
@@ -842,7 +844,9 @@ def scan(
         dir_label = {"up": "↑", "down": "↓", "flat": "→"}.get(r["direction"], "?")
         pe_str = f'{r["pe_pct"]:.0f}% {_valuation_label(r["pe_pct"])}' if r["pe_pct"] is not None else "暂无"
         pb_str = f'{r["pb_pct"]:.0f}% {_valuation_label(r["pb_pct"])}' if r["pb_pct"] is not None else "暂无"
+        low_str = f'{r.get("low_all", 0):.2f}'
         flo_str = f'+{r["from_low"]:.0f}%' if r.get("from_low", 0) > 5 else f'‼️+{r["from_low"]:.0f}%'
+        high_str = f'{r.get("high_all", 0):.2f}'
         fhi_str = f'{r["from_high"]:.0f}%'
         table.add_row(
             r["code"],
@@ -852,7 +856,9 @@ def scan(
             dir_label,
             pe_str,
             pb_str,
+            low_str,
             flo_str,
+            high_str,
             fhi_str,
             r["trend"],
         )
@@ -885,8 +891,10 @@ def dashboard() -> None:
     table.add_column("现价", justify="right")
     table.add_column("评分", justify="center")
     table.add_column("距买入", justify="center")
-    table.add_column("距最低", justify="right")
-    table.add_column("距最高", justify="right")
+    table.add_column("最低", justify="right")
+    table.add_column("距低", justify="right")
+    table.add_column("最高", justify="right")
+    table.add_column("距高", justify="right")
     table.add_column("最快路径", justify="left")
     table.add_column("持仓", justify="right")
 
@@ -933,14 +941,18 @@ def dashboard() -> None:
         high_all = max(closes) if closes else 0
         from_low = (data.latest_price - low_all) / low_all * 100 if low_all else 0
         from_high = (data.latest_price / high_all - 1) * 100 if high_all else 0
+        low_str = f'{low_all:.2f}'
         flo_str = f'+{from_low:.0f}%' if from_low > 5 else f'‼️+{from_low:.0f}%'
+        high_str = f'{high_all:.2f}'
         fhi_str = f'{from_high:.0f}%'
 
         table.add_row(
             code, f"{data.latest_price:.2f}",
             f"[{score_color}]{sr.score}[/{score_color}]",
             need_str,
+            low_str,
             flo_str,
+            high_str,
             fhi_str,
             best_path, pos_str or "—",
         )

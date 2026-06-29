@@ -47,7 +47,7 @@
     <div class="text-xs text-slate-400">
       <span x-text="'评分 '+p.score+'/100 | 加仓: '+p.pos_next_add+' | 剩余: '+p.pos_adds_left"></span>
       <span x-show="p.pos_trigger_add" class="ml-2 px-1.5 py-0.5 bg-red-500 text-white rounded font-bold">触发加仓</span>
-      <br><span x-text="'距历史最低 +'+(p.from_low||0).toFixed(0)+'% | 距历史最高 '+(p.from_high||0).toFixed(0)+'%'"></span>
+      <br><span x-text="'最低 '+(p.low_all||0).toFixed(2)+' 距低 +'+(p.from_low||0).toFixed(0)+'% | 最高 '+(p.high_all||0).toFixed(2)+' 距高 '+(p.from_high||0).toFixed(0)+'%'"></span>
     </div>
   </div>
   </template>

@@ -71,8 +71,8 @@
         <div class="grid grid-cols-2 gap-2 text-xs text-slate-300 mb-3">
           <div><span x-text="'PE '+((s.pe_pct||50).toFixed(0))+'%'"></span></div>
           <div><span x-text="'PB '+((s.pb_pct||50).toFixed(0))+'%'"></span></div>
-          <div><span x-text="'距低 +'+(s.from_low||0).toFixed(0)+'%'"></span></div>
-          <div><span x-text="'距高 '+(s.from_high||0).toFixed(0)+'%'"></span></div>
+          <div><span class="text-slate-400" x-text="'最低'+(s.low_all||0).toFixed(2)"></span> <span x-text="'距低 +'+(s.from_low||0).toFixed(0)+'%'"></span></div>
+          <div><span class="text-slate-400" x-text="'最高'+(s.high_all||0).toFixed(2)"></span> <span x-text="'距高 '+(s.from_high||0).toFixed(0)+'%'"></span></div>
           <div><span x-text="s.trend||''"></span></div>
           <div><span x-text="s.direction||''"></span></div>
         </div>

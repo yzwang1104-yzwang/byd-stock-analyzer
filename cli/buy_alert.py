@@ -103,7 +103,9 @@ for f in sorted(os.listdir('.cache')):
                 'cur': cur,
                 'score': score,
                 'rsi': rsi_now,
+                'all_low': all_low,
                 'from_low': from_low,
+                'all_high': all_high,
                 'from_high': from_high,
                 'trend': trend,
                 'today': today_chg,
@@ -118,30 +120,25 @@ if not alerts:
     print('  当前无触发买入提醒的股票。')
     print(f'  阈值: 评分≥{ALERT_THRESHOLD} | RSI≤{RSI_EXTREME} | 距低≤{LOW_PROXIMITY}%')
 else:
-    # Group by urgency
+    # Group by urgency for summary
     hot = [a for a in alerts if a['score'] >= 90]
     warm = [a for a in alerts if 80 <= a['score'] < 90]
     watch = [a for a in alerts if a['score'] < 80]
 
-    if hot:
-        print(f'🔥🔥 强烈买入提醒 ({len(hot)}只):')
-        for a in hot:
-            print(f'  {a["code"]} {a["name"]:<6}  {a["cur"]:.2f}元  评分{a["score"]:.0f}  RSI{a["rsi"]:.0f}  距低{a["from_low"]:.0f}%  {a["trend"]}  {a["reasons"]}')
-        print()
+    # ── Unified TOP 40 table ──
+    top40 = alerts[:40]
+    print(f'{"#":>3}  {"代码":<8} {"名称":<8} {"现价":>7} {"评分":>4} {"RSI":>4} {"最低":>8} {"距低":>5} {"最高":>8} {"距高":>5} {"趋势":>3}  信号')
+    print('─' * 120)
+    for i, a in enumerate(top40, 1):
+        tag = '🔥' if a['score'] >= 90 else ('🟡' if a['score'] >= 80 else '🔵')
+        from_high_str = f'{a["from_high"]:.0f}%' if a['from_high'] > -99 else '‼️'
+        print(f'{i:>3}  {a["code"]:<8} {a["name"]:<8} {a["cur"]:>7.2f} {a["score"]:>4.0f} {a["rsi"]:>4.0f} {a["all_low"]:>8.2f} {a["from_low"]:>+4.0f}% {a["all_high"]:>8.2f} {from_high_str:>5} {a["trend"]:>3}  {tag} {a["reasons"]}')
+    print()
 
-    if warm:
-        print(f'🟡 建议买入提醒 ({len(warm)}只):')
-        for a in warm[:10]:
-            print(f'  {a["code"]} {a["name"]:<6}  {a["cur"]:.2f}元  评分{a["score"]:.0f}  RSI{a["rsi"]:.0f}  距低{a["from_low"]:.0f}%  {a["trend"]}')
-        print()
-
-    if watch:
-        print(f'🔵 关注级 ({len(watch)}只, RSI或距低触发):')
-        for a in watch[:5]:
-            print(f'  {a["code"]} {a["name"]:<6}  {a["cur"]:.2f}元  {a["reasons"]}')
-        print()
-
-    print(f'总计: {len(alerts)} 只触发提醒 | 扫描 {len([f for f in os.listdir(".cache") if f.startswith("prices_")])} 只')
+    # Summary
+    print(f'── TOP{len(top40)} 中: 🔥强烈({len([a for a in top40 if a["score"]>=90])}) 🟡建议({len([a for a in top40 if 80<=a["score"]<90])}) 🔵关注({len([a for a in top40 if a["score"]<80])})')
+    print(f'── 全部触发: {len(alerts)}只 | 扫描 2021 只')
+    print(f'── 历史最低/最高基于缓存数据（最长641个交易日）')
 
 print()
 print('下次提醒: 交易时段每小时自动扫描')
