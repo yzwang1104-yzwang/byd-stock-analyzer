@@ -1313,3 +1313,138 @@ Cron: 12个在线 | 股票池: 1,019只 | 买入提醒: 64只触发
 - [ ] CLAUDE.md git commit
 
 **最后更新:** 2026-06-26 11:30 CST
+
+---
+
+## 十五、2026-06-29 会话记录
+
+### 时间线
+
+| 时间 | 事件 |
+|------|------|
+| 07:00 | Claude Code CLI 修复：claude.exe.old→claude.exe（更新中断导致） |
+| 07:10 | BYD 项目环境初始化：venv、pip install、pyproject.toml build-backend 修复 |
+| 07:15 | pip install -e . 开发模式安装，修复 core 模块导入 |
+| 07:20 | 环境就绪：Python 3.12 + Django + TA-Lib + AkShare 全部正常 |
+| 07:58 | 比亚迪实时分析：78.20 元，评分 51/WAIT，PE 67% PB 0.55%，趋势下跌 |
+| 08:00 | 全市场扫描 2,016 只股票：761 只强烈买入，TOP3 长江电力/国投电力/联影医疗 |
+| 08:10 | 用户要求永久添加历史最低/最高字段 → 根因分析 |
+| 08:30 | **11 文件改动**：历史最低/最高字段添加到所有 CLI + Web 工具 |
+| 08:35 | 创建 core/quick_analyzer.py 共享分析器（28 标准字段）|
+| 08:40 | Git commit f9571bb |
+| 09:00 | 安装 agent-browser MCP Server v0.31.1（Edge CDP 后端）|
+| 09:05 | 安装 frontend-design 插件 |
+| 09:05 | 安装 skill-creator 插件 |
+| 09:10 | /diagram 生成 BYD 架构图（.mmd + .svg + .excalidraw）|
+| 09:15 | 修复 /diagram 中文乱码：decodeURIComponent(escape(atob(...))) |
+
+### 今日 Commits
+
+```
+f9571bb feat: permanently add historical low/high fields to ALL tools
+```
+
+### 核心改动 1：历史最低/最高字段永久化
+
+**根因：** 每个 CLI/Web 工具各自内联分析逻辑，字段不一致。buy_alert.py 有 `from_low`/`from_high`，top20 只有 `low_all`，top10 全缺。
+
+**修复：**
+
+| 文件 | 新增字段 | 说明 |
+|------|:---:|------|
+| `cli/top20_standalone.py` | `最高` `距高` | 全市场 TOP40 |
+| `cli/tenbagger.py` | `最高` `距高` | 10 倍黑马 |
+| `cli/top10.py` | `最低` `距低` `最高` `距高` | TOP10 推荐 |
+| `cli/main.py` | `距最低` `距最高` | scan + dashboard |
+| `apps/stocks/views.py` | `low_all` `from_low` `high_all` `from_high` | Django API |
+| `templates/stocks/*.html` (4) | 距低/距高列 | Web 仪表盘/扫描/持仓/详情 |
+| `core/quick_analyzer.py` | **新建** | 共享分析器，28 标准字段 |
+
+**永久方案：** `core/quick_analyzer.py` 单一共享函数，28 个标准字段。以后任何新工具调用 `analyze_stock(code)` 即可自动获得历史最低/最高。
+
+### 核心改动 2：项目环境修复
+
+| 修复 | 文件 | 说明 |
+|------|------|------|
+| build-backend | `pyproject.toml` | `setuptools.backends._legacy:_Backend` → `setuptools.build_meta`（pip 26.x 不兼容） |
+| 包发现 | `pyproject.toml` | 添加 `[tool.setuptools.packages.find]`，include core/cli/apps/config/utils |
+| 开发安装 | — | `pip install -e .` 后无需 PYTHONPATH |
+
+### 核心改动 3：/diagram 中文乱码修复
+
+**根因：** mermaid 渲染管线使用 `atob()` 解码 base64，只能处理 Latin-1，中文 UTF-8 字节被截断。
+
+**修复：** 始终使用 `decodeURIComponent(escape(atob(base64_source)))` 替代裸 `atob()`。
+
+```
+# 错误（乱码）：
+atob('$(base64 < source.mmd)')
+
+# 正确（UTF-8 安全）：
+decodeURIComponent(escape(atob('$(base64 < source.mmd)')))
+```
+
+此规则写入 /diagram 操作记忆，以后所有中文图表自动应用。
+
+### 安装的工具生态
+
+| 工具 | 类型 | 状态 |
+|------|------|:--:|
+| agent-browser v0.31.1 | MCP Server | ✅ Edge CDP 后端 |
+| frontend-design | Claude Code 插件 | ✅ 已启用 |
+| skill-creator | Claude Code 插件 | ✅ 已启用 |
+| superpowers v6.0.3 | Claude Code 插件 | ✅ 已启用 |
+| claude-mem | Claude Code 插件 | ⚠️ 文件锁，待重启重装 |
+
+### 环境变量记录
+
+```bash
+# agent-browser MCP 浏览器路径
+CHROME_PATH=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+
+# BYD 项目虚拟环境
+C:\Users\Administrator\byd-stock-analyzer\.venv\
+```
+
+### 当前分析 (2026-06-29 上午)
+
+```
+比亚迪 78.20(-4.87%) | 评分 51/WAIT | PE 67% PB 0.55% | RSI 25 超卖 | 趋势↓
+  → 价格跌破布林下轨(82.39)，RSI 极端超卖，PB 极度便宜
+  → 但趋势仍下跌，系统建议观望等反转确认
+  
+上汽集团 9.79 创历史新低 | 评分 87/BUY | RSI 4 极端 | 距最高 -53%
+  → 排名#27，RSI 达到历史级别超卖，等趋势翻↑是加仓时机
+
+国电电力 4.71 | 评分 95/STRONG BUY | RSI 20 | 趋势↑
+  → 排名#6，距离上次建仓价持平，评分从 65 飙到 95
+
+全市场: 2,016 只 | 🔥≥70: 761 (37.8%) | 🟡55-69: 1,084 | ⚪<55: 171
+大盘: 熊市 ↓ | 上证50 3.00
+```
+
+### 新增项目文件
+
+| 文件 | 功能 |
+|------|------|
+| `diagrams/byd-architecture.mmd` | 架构图 mermaid 源文件 |
+| `diagrams/byd-architecture.svg` | 架构图矢量渲染 |
+| `diagrams/byd-architecture.excalidraw` | 架构图可编辑场景 |
+| `core/quick_analyzer.py` | 共享股票分析函数（28 字段） |
+
+### 永久约定（新增）
+
+1. **所有扫描工具必须包含 4 个历史字段：** `low_all`（历史最低价）、`from_low`（距最低%）、`high_all`（历史最高价）、`from_high`（距最高%）
+2. **新建工具优先调用 `core/quick_analyzer.py`** 而非内联分析逻辑
+3. **`/diagram` 中文图必须用 `decodeURIComponent(escape(atob(...)))`** 编码，不用裸 `atob()`
+4. **Claude Code CLI 更新中断时**，`.old` 文件可直接改回 `.exe` 恢复
+
+### 待办
+
+- [ ] claude-mem 重启后重装（thethedotmack 目录文件锁）
+- [ ] 比亚迪到 76 以下考虑建仓（RSI 25 + PB 0.55% 极度便宜 + 跌破布林下轨）
+- [ ] 上汽趋势翻↑确认后加仓（RSI 4 极端，距最高 -53%）
+- [ ] 国电电力 4.71 持仓跟踪，评分 95 最高级别
+- [ ] /diagram 路径下的 `.mmd`/`.excalidraw` 文件加入 git
+
+**最后更新:** 2026-06-29 09:20 CST
