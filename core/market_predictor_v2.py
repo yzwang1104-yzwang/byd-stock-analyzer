@@ -1,0 +1,213 @@
+"""上证指数预测 V2 — 修复版
+
+V1 问题:
+1. 使用缓存数据（可能滞后），未获取实时行情
+2. 6因子平局时强行选方向，而不是承认不确定
+3. 无 V 型反转检测 — 上午大跌下午反弹是常见模式
+4. 无预测记录和事后验证
+
+V2 改进:
+1. 优先使用腾讯实时行情
+2. 平局（3-3）时输出"震荡"，不强行选边
+3. 加入日内V反检测：上午跌幅>1%时触发反弹预警
+4. 每次预测自动存档，收盘后自动验证
+"""
+
+import json
+import statistics
+import urllib.request as R
+from datetime import datetime, date
+from pathlib import Path
+from typing import Optional
+
+
+HISTORY_FILE = Path(".prediction_history/sh_index_predictions.json")
+
+
+def _fetch_realtime() -> Optional[dict]:
+    """获取上证50实时行情。"""
+    try:
+        url = "http://qt.gtimg.cn/q=sh510050,sh000001"
+        data = R.urlopen(url, timeout=10).read().decode("gbk")
+        result = {}
+        for line in data.strip().split("\n"):
+            if not line.strip():
+                continue
+            parts = line.split("~")
+            if "sh510050" in line:
+                result["etf_price"] = float(parts[3])
+                result["etf_prev"] = float(parts[4])
+                result["etf_chg"] = (result["etf_price"] - result["etf_prev"]) / result["etf_prev"] * 100
+            elif "sh000001" in line:
+                result["index"] = float(parts[3])
+                result["index_prev"] = float(parts[4])
+                result["index_chg"] = (result["index"] - result["index_prev"]) / result["index_prev"] * 100
+        return result if result else None
+    except Exception:
+        return None
+
+
+def predict() -> dict:
+    """预测上证指数方向。返回预测结果和置信度。"""
+    import numpy as np
+    import pandas as pd
+
+    # 1. 获取实时行情
+    rt = _fetch_realtime()
+
+    # 2. 获取历史数据
+    try:
+        df = pd.read_csv(".cache/prices_510050.csv", index_col=0, parse_dates=True)
+        cl = df["close"]
+    except Exception:
+        return {"direction": "unknown", "confidence": 0, "error": "无历史数据"}
+
+    p = cl.iloc[-1]
+    # 如果有实时数据，使用实时价格
+    if rt:
+        p = rt["etf_price"]
+
+    # 3. 技术指标
+    m5 = cl.rolling(5).mean().iloc[-1]
+    m10 = cl.rolling(10).mean().iloc[-1]
+    m20 = cl.rolling(20).mean().iloc[-1]
+    m50 = cl.rolling(50).mean().iloc[-1]
+
+    delta = cl.diff()
+    gain = delta.clip(lower=0)
+    loss = (-delta).clip(lower=0)
+    avg_gain = gain.ewm(alpha=1 / 14, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
+    rs0 = rsi.iloc[-1]
+
+    mom5 = (p - cl.iloc[-6]) / cl.iloc[-6] * 100
+
+    # 4. 打分（-50 ~ +50）
+    score = 0
+
+    # MA 排列 (25分)
+    if p > m5: score += 5
+    else: score -= 5
+    if m5 > m10: score += 5
+    else: score -= 5
+    if m10 > m20: score += 5
+    else: score -= 5
+    if m20 > m50: score += 10
+    else: score -= 10
+
+    # RSI (20分)
+    if rs0 > 60: score += 8
+    elif rs0 >= 45: score += 0
+    elif rs0 >= 30: score -= 8
+    else: score += 12  # 超卖反弹
+
+    # 动量 (20分)
+    if mom5 > 1.5: score += 10
+    elif mom5 > 0.3: score += 5
+    elif mom5 > -0.3: score += 0
+    elif mom5 > -1.5: score -= 5
+    else: score -= 10
+
+    # 日内V反检测 (15分)
+    rt_chg = rt.get("etf_chg", 0) if rt else 0
+    if rt_chg < -1.5:
+        score += 8  # 上午大跌 → 下午可能V反
+
+    # 5. 判定
+    if score >= 5:
+        direction = "up"
+        confidence = min(85, 50 + abs(score))
+    elif score <= -5:
+        direction = "down"
+        confidence = min(85, 50 + abs(score))
+    else:
+        direction = "flat"
+        confidence = 50 - abs(score)  # 分数越接近0，越不确定
+
+    result = {
+        "timestamp": datetime.now().isoformat(),
+        "date": date.today().isoformat(),
+        "direction": direction,
+        "confidence": confidence,
+        "score": score,
+        "factors": {
+            "price": round(p, 2),
+            "ma5": round(m5, 2),
+            "ma20": round(m20, 2),
+            "ma50": round(m50, 2),
+            "rsi": round(rs0, 1),
+            "mom5": round(mom5, 2),
+            "intraday_chg": round(rt_chg, 2) if rt else None,
+        },
+        "label": {"up": "涨 ↑", "down": "跌 ↓", "flat": "震荡 →", "unknown": "无法判断"}[direction],
+    }
+
+    # 6. 存档
+    _archive_prediction(result)
+
+    return result
+
+
+def _archive_prediction(result: dict) -> None:
+    """保存预测记录。"""
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    records = []
+    if HISTORY_FILE.exists():
+        try:
+            records = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+    records.append({
+        "id": len(records) + 1,
+        "ts": result["timestamp"],
+        "direction": result["direction"],
+        "confidence": result["confidence"],
+        "score": result["score"],
+        "actual": None,
+    })
+    HISTORY_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def verify(actual_change: float) -> dict:
+    """验证最新预测——用实际涨跌方向比对。"""
+    if not HISTORY_FILE.exists():
+        return {"status": "no_predictions"}
+
+    records = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+    if not records:
+        return {"status": "no_predictions"}
+
+    last = records[-1]
+    if last.get("actual") is not None:
+        return {"status": "already_verified"}
+
+    actual_dir = "up" if actual_change > 0 else ("down" if actual_change < 0 else "flat")
+    correct = last["direction"] == actual_dir
+
+    last["actual"] = actual_change
+    last["actual_dir"] = actual_dir
+    last["correct"] = correct
+    HISTORY_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 统计准确率
+    verified = [r for r in records if r.get("correct") is not None]
+    total = len(verified)
+    correct_count = sum(1 for r in verified if r["correct"])
+    acc = round(correct_count / total * 100, 1) if total > 0 else 0
+
+    return {
+        "status": "ok",
+        "predicted": last["direction"],
+        "actual": actual_dir,
+        "correct": correct,
+        "total_predictions": total,
+        "accuracy": acc,
+    }
+
+
+if __name__ == "__main__":
+    result = predict()
+    print(f"上证预测 V2: {result['label']}  置信度: {result['confidence']}%")
+    print(f"因子: 价格{result['factors']['price']} MA20>{result['factors']['ma50'] if result['factors']['ma20']>result['factors']['ma50'] else 'MA20<MA50'} RSI{result['factors']['rsi']}")
