@@ -1469,49 +1469,86 @@ CHROME_PATH=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
 C:\Users\Administrator\byd-stock-analyzer\.venv\
 ```
 
-### 当前分析 (2026-06-29 上午)
+### 当前分析 (2026-06-29 收盘)
 
 ```
-比亚迪 78.20(-4.87%) | 评分 51/WAIT | PE 67% PB 0.55% | RSI 25 超卖 | 趋势↓
-  → 价格跌破布林下轨(82.39)，RSI 极端超卖，PB 极度便宜
-  → 但趋势仍下跌，系统建议观望等反转确认
-  
-上汽集团 9.79 创历史新低 | 评分 87/BUY | RSI 4 极端 | 距最高 -53%
-  → 排名#27，RSI 达到历史级别超卖，等趋势翻↑是加仓时机
+比亚迪 79.78(-1.0%) | 评分 65/WAIT | PE 67% PB 1% | RSI 20 超卖 | 趋势↓
+  → 上午低 78.20 → 午后反弹 80.50 → 收 79.78
+  → 评分从 51 升到 65（RSI 降到 20 触发更深超卖加分）
 
-国电电力 4.71 | 评分 95/STRONG BUY | RSI 20 | 趋势↑
-  → 排名#6，距离上次建仓价持平，评分从 65 飙到 95
+上汽集团 9.73 创历史新低 | 评分 87/BUY | RSI 4 极端 | 距高 -54%
+  → 全天未脱离最低价，可加仓@9.22（差5%）
 
-全市场: 2,016 只 | 🔥≥70: 761 (37.8%) | 🟡55-69: 1,084 | ⚪<55: 171
-大盘: 熊市 ↓ | 上证50 3.00
+宝新能源 4.84 | 评分 87/BUY | 趋势↑ | 今日建仓 100股@4.74 盈+2.1%
+国电电力 4.69 | 趋势UP | 持仓 100股@4.71 亏-0.4%
+*ST三房 1.58 | 评分 48/SELL | 持仓 400股@2.67 亏-40.9% | 午后+5.3%反弹
+
+大盘: 上午熊市↓ → 午后 V反转牛市↑ | 上证50 3.00→3.06(+2.0%)
+上证预测: 跌↓ ❌错误（实际涨+2.0%）
+
+全市场: 2,017只 | 🔥≥70: 767(38%)
+预测: 282次 MAE 0.46 区间 96.5%
+定时任务: 11个在线（持久化）
 ```
 
-### 新增项目文件
+### 持仓 (2026-06-29 收盘)
+
+| 股票 | 股数 | 均价 | 成本 | 市值 | 盈亏 |
+|------|:--:|------|------|------|------|
+| 600104 上汽集团 | 200 | 10.38 | 2,076 | 1,946 | -130 |
+| 600370 \*ST三房 | 400 | 2.67 | 1,069 | 632 | -437 |
+| 600795 国电电力 | 100 | 4.71 | 471 | 469 | -2 |
+| 000690 宝新能源 | 100 | 4.74 | 474 | 484 | +10 |
+| **合计** | **800** | — | **4,090** | **3,531** | **-559** |
+
+现金: 102.55元
+
+### 今日 Commits (新增)
+
+```
+82dbe4c feat: market predictor V2 — real-time data, flat-tie handling, V-reversal detection, auto-archive
+b17bc4e fix: _auto_backfill encoding — use utf-8 to match new prediction_tracker format
+88ee0fe fix: complete historical low/high fields across ALL tools (9 files)
+029038e fix: thread-safe prediction tracker — prevent history crashes permanently
+```
+
+### 核心改动 6：上证预测 V2
+
+**V1 问题：** ①用缓存数据不拉实时 ②3-3平局强行选方向 ③无V反检测
+
+**V2 改进：**
+- 优先腾讯实时行情
+- 平局（-5~+5分）输出"震荡→"不强行选边
+- 上午跌幅>1.5%触发反弹预警+8分
+- 自动存档+收盘回填验证
+
+**今天验证：** V1预测跌↓ ❌ → V2预测震荡→（诚实承认不确定）
+
+### 今日新增文件
 
 | 文件 | 功能 |
 |------|------|
-| `diagrams/byd-architecture.mmd` | 架构图 mermaid 源文件 |
-| `diagrams/byd-architecture.svg` | 架构图矢量渲染 |
-| `diagrams/byd-architecture.excalidraw` | 架构图可编辑场景 |
-| `core/quick_analyzer.py` | 共享股票分析函数（28 字段） |
+| `core/market_predictor_v2.py` | 上证预测 V2 — 实时数据+平局处理+V反检测 |
+| `cli/_cron_logger.py` | Cron 任务统一日志 |
+| `cli/_top40_filter.py` | 板块过滤扫描工具 |
+| `cli/_semi.py` | 半导体板块分析 |
 
-### 永久约定（新增）
+### 今日教训
 
-1. **所有扫描工具必须包含 4 个历史字段：** `low_all`（历史最低价）、`from_low`（距最低%）、`high_all`（历史最高价）、`from_high`（距最高%）
-2. **新建工具优先调用 `core/quick_analyzer.py`** 而非内联分析逻辑
-3. **`/diagram` 中文图必须用 `decodeURIComponent(escape(atob(...)))`** 编码，不用裸 `atob()`
-4. **Claude Code CLI 更新中断时**，`.old` 文件可直接改回 `.exe` 恢复
-5. **所有 JSON 持久化必须通过 `core/prediction_tracker.py`** — 它提供文件锁+原子写入+自动恢复。禁止直接 `json.dump` 到预测文件。
-6. **并发写入场景必须用 `FileLock`**（`from core.prediction_tracker import FileLock`）
-7. **读取 JSON 文件必须用 `_try_decode()`** 或 `_load_records_safe()` — 兼容 GBK 旧文件
+1. **上证预测：不确定时就说"震荡"，不强行选方向。** 今天 V1 3-3平局强行选跌→错误。V2 承认不确定。
+2. **Cron 结果要主动汇报。** 之后每次回到对话自动读取 cron_daily.log 汇总。
+3. **"永久化"要 grep 全量+逐个验证。** 今天修了 9 个文件才把历史字段补全。
+4. **趋势↓的底部股票可以关注但不能买。** 今天 TOP40 全是底部+DN，等翻↑才是买点。
 
 ### 待办
 
-- [ ] claude-mem 重启后重装（thethedotmack 目录文件锁）
-- [ ] 比亚迪到 76 以下考虑建仓（现价 78.58，RSI 25 + PB 1% 极度便宜）
-- [ ] 上汽趋势翻↑确认后加仓（RSI 4 极端，创历史新低 9.73）
-- [ ] 国电电力 4.71 持仓跟踪，评分 95 最高级别
-- [ ] /diagram 路径下的 `.mmd`/`.excalidraw` 文件加入 git
-- [ ] history fix commit + push
+- [ ] 比亚迪趋势翻↑建仓（现价 79.78，评分升至 65）
+- [ ] 上汽加仓@9.22 或趋势翻↑（距触发差5%）
+- [ ] 三房反弹 1.80-2.00 减亏出局
+- [ ] 明天验证上证预测 V2 准确率
+- [x] CLAUDE.md git commit ✅
+- [x] history crash fix ✅
+- [x] Claude CLI 路径修复 ✅
+- [x] 历史字段全工具补全 ✅
 
-**最后更新:** 2026-06-29 09:40 CST
+**最后更新:** 2026-06-29 18:00 CST
