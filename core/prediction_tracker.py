@@ -225,6 +225,12 @@ def record_prediction(
 
     线程安全：整个「读取→追加→写入」在文件锁保护下完成。
     """
+    if predicted_low > predicted_high:
+        raise ValueError(
+            f"预测下界({predicted_low})不能大于预测上界({predicted_high})"
+        )
+    if current_price <= 0:
+        raise ValueError(f"当前价必须为正数，收到: {current_price}")
     _ensure_tracker_dir()
     path = _records_path(stock_code)
 

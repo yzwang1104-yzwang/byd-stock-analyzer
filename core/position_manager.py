@@ -100,6 +100,10 @@ def save_position(pos: Position) -> None:
 
 
 def add_entry(stock_code: str, price: float, shares: int, entry_date: Optional[str] = None) -> Position:
+    if price <= 0:
+        raise ValueError(f"成交价必须为正数，收到: {price}")
+    if shares <= 0:
+        raise ValueError(f"股数必须为正数，收到: {shares}")
     pos = load_position(stock_code) or Position(stock_code=stock_code)
     if entry_date is None:
         entry_date = date.today().isoformat()
