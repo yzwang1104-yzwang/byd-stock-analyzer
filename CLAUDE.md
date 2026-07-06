@@ -1647,3 +1647,61 @@ c875cb8 fix: rewrite market_predictor_v2.py — fix encoding corruption
 4. **不要总结40行数据——显示完整40行，带表头。**
 
 **最后更新:** 2026-07-03 15:30 CST
+
+---
+
+## 十七、2026-07-06 会话记录
+
+### 卖出提醒系统上线
+
+| 时间 | 事件 |
+|------|------|
+| 06:19 | 实时预测：比亚迪 88.47，评分48/SELL，区间86.72-92.87 |
+| 06:30 | /brainstorming 卖出提醒功能：低点买入→高点50%出仓 |
+| 07:00 | 方案确认：独立脚本 cli/sell_alert.py，45%-70%区间，实时数据 |
+| 08:00 | Spec + Plan 写入 docs/superpowers/ |
+| 08:30 | Subagent-Driven Development 执行 4 Task |
+| 08:37 | 全部完成：39 tests PASS，13 Cron 在线 |
+
+### sell_alert.py 功能
+
+```bash
+python cli/sell_alert.py
+```
+
+**触发条件（双条件）：**
+1. 低点买入：持仓均价 ≤ 历史最低 × 1.15
+2. 目标区间：历史最高 × 45% ≤ 当前实时价 ≤ 历史最高 × 70%
+
+**数据源：** 腾讯实时行情 + 全量K线（每次重新拉取，不做缓存）
+
+**调度：** 交易日 09:30 / 11:00 / 14:00 / 14:50
+
+### 今日 Commits
+
+```
+5935434 fix: clean up test_sell_alert.py — remove dead imports/fixtures, use constants
+0902c6e test: add sell_alert unit tests — 11 tests covering conditions and edge cases
+9b64a81 fix: sell_alert.py — missing return after no-results, dead code, sort key scope
+bb81d46 feat: add sell_alert.py — 低点买入后高点出仓提醒
+c031437 docs: sell_alert spec + implementation plan
+```
+
+### Cron 任务（13个持久化）
+
+| # | 时间 | 任务 | 新增 |
+|:--:|------|------|:--:|
+| 1-12 | 原12个 | 全部保留 | |
+| 13 | 09:30 | 卖出提醒 #1 | ✅ |
+| 14 | 11:00 | 卖出提醒 #2 | ✅ |
+| 15 | 14:00 | 卖出提醒 #3 | ✅ |
+| 16 | 14:50 | 卖出提醒 #4 | ✅ |
+
+### 测试覆盖
+
+```
+39 tests | 0 failures | 7.80s
++11 test_sell_alert (低点买入/目标区间/盈亏/距离标签)
+```
+
+**最后更新:** 2026-07-06 08:37 CST
