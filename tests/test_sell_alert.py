@@ -1,42 +1,10 @@
 """sell_alert.py 单元测试 — 条件判断逻辑。"""
 
-import json
-import os
 import sys
-import tempfile
-from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 # 确保 sell_alert 可导入
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-# ---- 模拟 Position 数据 ----
-
-@pytest.fixture
-def mock_position_low_buy():
-    """低点买入持仓：均价 78.50，历史最低 78.00（78.50 ≤ 78 × 1.15 = 89.70 ✅）"""
-    return {
-        "stock_code": "002594",
-        "trigger_base": None,
-        "entries": [
-            {"date": "2026-07-01", "price": 78.50, "shares": 100, "entry_type": "initial"}
-        ],
-    }
-
-
-@pytest.fixture
-def mock_position_high_buy():
-    """高点买入持仓：均价 150.00，历史最低 78.00（150 > 78 × 1.15 = 89.70 ❌）"""
-    return {
-        "stock_code": "002594",
-        "trigger_base": None,
-        "entries": [
-            {"date": "2026-01-01", "price": 150.00, "shares": 100, "entry_type": "initial"}
-        ],
-    }
 
 
 # ---- 测试：低点买入判断逻辑 ----
@@ -127,23 +95,26 @@ def test_pnl_negative():
 
 def test_dist_label_already_in_range():
     """已触发的显示'已触发'"""
+    from cli.sell_alert import SELL_LOWER, SELL_UPPER
+
     cur = 100.0
     high_all = 200.0
-    target_low = high_all * 0.45   # 90
-    target_high = high_all * 0.70  # 140
+    target_low = high_all * SELL_LOWER   # 90
+    target_high = high_all * SELL_UPPER  # 140
     in_range = target_low <= cur <= target_high
     assert in_range
 
-    if in_range:
-        dist = "已触发"
+    dist = "已触发"
     assert dist == "已触发"
 
 
 def test_dist_label_below():
     """低于区间下边界 → 显示 ↓百分比（离下边界还差多少）"""
+    from cli.sell_alert import SELL_LOWER
+
     cur = 80.0
     high_all = 200.0
-    target_low = high_all * 0.45  # 90
+    target_low = high_all * SELL_LOWER  # 90
     gap_pct = (target_low / cur - 1) * 100
     dist = f"↓{gap_pct:.0f}%"
     assert dist == "↓12%"
@@ -151,9 +122,11 @@ def test_dist_label_below():
 
 def test_dist_label_above():
     """高于区间上边界 → 显示 ↑百分比（已超出上边界多少）"""
+    from cli.sell_alert import SELL_UPPER
+
     cur = 160.0
     high_all = 200.0
-    target_high = high_all * 0.70  # 140
+    target_high = high_all * SELL_UPPER  # 140
     gap_pct = (cur / target_high - 1) * 100
     dist = f"↑{gap_pct:.0f}%"
     assert dist == "↑14%"
