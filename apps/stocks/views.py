@@ -1,7 +1,6 @@
 """Django 视图——薄层，复用 core/ 模块。"""
 
 import io, sys
-import statistics
 import json
 
 from pathlib import Path
@@ -156,28 +155,27 @@ def _run_analysis(code: str) -> dict:
 
 
 def _calc_sma(values: list, period: int) -> list:
-    result = []
-    for i in range(len(values)):
-        if i < period - 1:
-            result.append(None)
-        else:
-            result.append(round(sum(values[i - period + 1 : i + 1]) / period, 2))
-    return result
+    """使用 pandas 计算简单移动平均（红线 #16：不重复造轮子）。"""
+    import pandas as pd
+    s = pd.Series(values)
+    result = s.rolling(window=period).mean().round(2).tolist()
+    return [None if pd.isna(v) else v for v in result]
 
 
 def _calc_boll(values: list, period: int, std: int) -> tuple:
-    upper, mid, lower = [], [], []
-    for i in range(len(values)):
-        if i < period - 1:
-            upper.append(None); mid.append(None); lower.append(None)
-        else:
-            window = values[i - period + 1 : i + 1]
-            m = sum(window) / period
-            s = statistics.stdev(window)
-            upper.append(round(m + std * s, 2))
-            mid.append(round(m, 2))
-            lower.append(round(m - std * s, 2))
-    return upper, mid, lower
+    """使用 pandas 计算布林带（红线 #16：不重复造轮子）。"""
+    import pandas as pd
+    import math
+    s = pd.Series(values)
+    mid = s.rolling(window=period).mean()
+    stdev = s.rolling(window=period).std()
+    upper = mid + std * stdev
+    lower = mid - std * stdev
+    return (
+        [None if math.isnan(v) else round(v, 2) for v in upper.tolist()],
+        [None if math.isnan(v) else round(v, 2) for v in mid.tolist()],
+        [None if math.isnan(v) else round(v, 2) for v in lower.tolist()],
+    )
 
 
 # ====== Views ======
