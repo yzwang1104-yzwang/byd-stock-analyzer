@@ -15,8 +15,8 @@ import os
 import sys
 from datetime import datetime
 
-# Windows UTF-8 编码
-if sys.platform == "win32":
+# Windows UTF-8 编码（仅直接运行时，不影响 pytest 的 stdout capture）
+if __name__ == "__main__" and sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
