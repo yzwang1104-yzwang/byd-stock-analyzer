@@ -39,7 +39,8 @@ def _get_stock_name(code: str) -> str:
     if os.path.exists(name_file):
         try:
             cache = json.load(open(name_file, encoding="utf-8"))
-        except: pass
+        except Exception:
+            pass
     if code in cache:
         return cache[code]
     # 查腾讯API

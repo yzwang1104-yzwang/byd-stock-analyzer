@@ -15,7 +15,8 @@ for i,f in enumerate(files):
         d=fetch_normalized_data(code,force_refresh=True)
         if d and d.prices: ok+=1
         else: fail+=1
-    except: fail+=1
+    except Exception:
+        fail+=1
     if (i+1)%200==0:
         print(f'  {i+1}/{total}  OK:{ok} FAIL:{fail}')
 print(f'完成: {ok}成功 {fail}失败 / {total}总计')

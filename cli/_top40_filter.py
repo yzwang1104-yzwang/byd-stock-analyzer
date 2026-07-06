@@ -5,7 +5,8 @@ N={}
 try:
     import akshare as ak
     for _,r in ak.stock_info_a_code_name().iterrows(): N[r['code']]=r['name']
-except: pass
+except Exception:
+    pass
 K={'000001':'平安银行','000027':'深圳能源','000037':'深南电A','000539':'粤电力A',
 '000543':'皖能电力','000582':'北部湾港','000625':'长安汽车','000690':'宝新能源',
 '000876':'新希望','000983':'山西焦煤','001289':'龙源电力','001376':'百通能源',
@@ -100,7 +101,8 @@ for f in sorted(os.listdir('.cache')):
             skip=True
         if not skip:
             R.append({'c':c,'n':nm,'p':p,'s':sc,'r':rs0,'lo':lo,'fl':fl,'hi':hi,'fh':fh,'t':t,'c20':c20})
-    except: pass
+    except Exception:
+    pass
 
 R.sort(key=lambda x:x['s'],reverse=True)
 for i,r in enumerate(R[:40],1):

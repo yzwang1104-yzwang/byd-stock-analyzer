@@ -129,7 +129,8 @@ for f in sorted(os.listdir('.cache')):
                 'low_all':low_all,'from_low':from_low,
                 'high_all':high_all,'from_high':from_high,
             })
-    except: pass
+    except Exception:
+        pass
 
 # --sort 参数
 sort_col = 'score'

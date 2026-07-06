@@ -15,7 +15,7 @@ try:
     df = ak.stock_info_a_code_name()
     for _, row in df.iterrows():
         NAMES[row['code']] = row['name']
-except:
+except Exception:
     pass
 KNOWN = {
     '000001':'平安银行','000002':'万科A','000568':'泸州老窖','000596':'古井贡酒',
@@ -111,7 +111,7 @@ for f in sorted(os.listdir('.cache')):
                 'today': today_chg,
                 'reasons': ' | '.join(reasons),
             })
-    except:
+    except Exception:
         pass
 
 alerts.sort(key=lambda x: x['score'], reverse=True)
