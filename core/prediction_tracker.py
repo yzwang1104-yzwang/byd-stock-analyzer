@@ -147,63 +147,68 @@ def _try_decode(filepath: Path) -> list[dict]:
 def _save_records_safe(stock_code: str, records: list[dict]) -> None:
     """安全保存记录——带锁 + 原子写入 + 自动备份 + 归档。
 
-    注意：此函数不持有跨读写的锁，仅保护写入操作本身。
-    如需原子的「读取→修改→写入」，使用 record_prediction/backfill_actual。
+    整个「写入→归档」在同一个文件锁内完成，防止竞态条件。
     """
     _ensure_tracker_dir()
     path = _records_path(stock_code)
 
     with FileLock(path):
         _atomic_write_with_backup(path, records)
-
-    # 自动归档旧记录（不持锁时进行）
-    _auto_archive(stock_code)
+        # 归档必须在锁内——否则另一个进程可能在锁释放后修改文件
+        _auto_archive_locked(stock_code, path)
 
 
 def _auto_archive(stock_code: str) -> None:
-    """将超过 ARCHIVE_DAYS 天的记录移至归档文件。"""
+    """将超过 ARCHIVE_DAYS 天的记录移至归档文件（外部调用入口，自行加锁）。"""
     path = _records_path(stock_code)
+    if not path.exists():
+        return
+    with FileLock(path):
+        _auto_archive_locked(stock_code, path)
+
+
+def _auto_archive_locked(stock_code: str, path: Path) -> None:
+    """归档旧记录——调用者必须已持有 FileLock(path)。"""
     archive_path = Path(str(path) + ".archive.json")
     if not path.exists():
         return
 
     cutoff = datetime.now() - timedelta(days=ARCHIVE_DAYS)
-    with FileLock(path):
+    try:
+        records = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+
+    active = []
+    archived = []
+    for r in records:
         try:
-            records = json.loads(path.read_text(encoding="utf-8"))
+            ts = datetime.fromisoformat(r["timestamp"])
+        except (KeyError, ValueError):
+            active.append(r)
+            continue
+        if ts < cutoff:
+            archived.append(r)
+        else:
+            active.append(r)
+
+    if not archived:
+        return
+
+    # 加载已有归档
+    existing_archive = []
+    if archive_path.exists():
+        try:
+            existing_archive = json.loads(archive_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return
+            pass
 
-        active = []
-        archived = []
-        for r in records:
-            try:
-                ts = datetime.fromisoformat(r["timestamp"])
-            except (KeyError, ValueError):
-                active.append(r)
-                continue
-            if ts < cutoff:
-                archived.append(r)
-            else:
-                active.append(r)
+    # 写入活跃记录
+    _atomic_write(path, active)
 
-        if not archived:
-            return
-
-        # 加载已有归档
-        existing_archive = []
-        if archive_path.exists():
-            try:
-                existing_archive = json.loads(archive_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        # 写入活跃记录
-        _atomic_write(path, active)
-
-        # 追加到归档
-        existing_archive.extend(archived)
-        with open(archive_path, "w", encoding="utf-8") as f:
+    # 追加到归档
+    existing_archive.extend(archived)
+    with open(archive_path, "w", encoding="utf-8") as f:
             json.dump(existing_archive, f, ensure_ascii=False, indent=2)
 
 # ====== 记录预测 ======
