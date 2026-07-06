@@ -56,3 +56,13 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 DEFAULT_AUTO_FIELD = "django.db.BigAutoField"
+
+# ====== Celery 异步任务 (红线 #17) ======
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_ALWAYS_EAGER", "True") == "True"
+# 开发环境默认 CELERY_TASK_ALWAYS_EAGER=True（同步执行，不需要 Redis）
+# 生产环境设置 CELERY_ALWAYS_EAGER=False + 启动 Redis + celery worker
