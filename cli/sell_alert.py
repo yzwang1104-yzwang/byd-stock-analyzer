@@ -11,6 +11,7 @@ usage:
 """
 
 import io
+import logging
 import os
 import sys
 from datetime import datetime
@@ -22,6 +23,8 @@ if __name__ == "__main__" and sys.platform == "win32":
 
 from core.data_fetcher import fetch_normalized_data, fetch_realtime_quote
 from core.position_manager import load_position, POSITION_FILE
+
+logger = logging.getLogger(__name__)
 
 # ====== 阈值配置 ======
 LOW_BUY_THRESHOLD = 1.15   # 买入均价 ≤ 历史最低 × 1.15 视为低点买入
@@ -135,7 +138,8 @@ def main() -> None:
                     "avg_cost": avg_cost, "reason": "实时行情不可用",
                 })
                 continue
-        except Exception:
+        except Exception as e:
+            logger.warning("实时行情获取失败 %s: %s", code, e)
             skipped.append({
                 "code": code, "name": _get_name(code),
                 "avg_cost": avg_cost, "reason": "实时行情获取失败",
@@ -152,7 +156,8 @@ def main() -> None:
                 continue
             high_all = max(p.high for p in data.prices)
             low_all = min(p.low for p in data.prices)
-        except Exception:
+        except Exception as e:
+            logger.warning("K线数据获取失败 %s: %s", code, e)
             skipped.append({
                 "code": code, "name": _get_name(code),
                 "avg_cost": avg_cost, "reason": "K线数据获取失败",
@@ -223,7 +228,6 @@ def main() -> None:
     print("──  " + "─" * 95)
 
     for i, r in enumerate(results, 1):
-        tag = "⚡" if r["in_range"] else "  "
         target_range = f"{r['target_low']:.2f}~{r['target_high']:.2f}"
         print(f"{i:>3}  {r['code']:<8} {r['name']:<8} {r['cur']:>7.2f} {r['avg_cost']:>7.2f} "
               f"{r['high_all']:>9.2f} {target_range:>16} {r['dist']:>6} {r['pnl_pct']:>+5.1f}%")
