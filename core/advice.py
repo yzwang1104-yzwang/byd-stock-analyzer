@@ -63,7 +63,7 @@ def generate(
     rationale = _generate_rationale(score_result, analysis, current_price)
 
     # 5. 详细指标（--verbose）
-    details = _generate_details(score_result, analysis, current_price)
+    details = _generate_details(score_result, analysis, current_price, config.weights)
 
     return AdviceResult(
         stock_code=score_result.stock_code,
@@ -163,8 +163,11 @@ def _generate_details(
     score_result: ScoreResult,
     analysis: AnalysisResult,
     current_price: Optional[float],
+    weights: Optional[dict] = None,
 ) -> list[str]:
     """生成详细指标列表（--verbose / OUT-03）。"""
+    if weights is None:
+        weights = {"valuation": 0.35, "technical": 0.30, "trend": 0.20, "volume": 0.10, "sentiment": 0.05}
     details = []
     bd = score_result.breakdown
 
@@ -173,11 +176,16 @@ def _generate_details(
     details.append(f"综合评分: {score_result.score}/100 ({score_result.confidence}置信度)")
     details.append("")
     details.append("=== 评分细项 ===")
-    details.append(f"估值因子: {bd.valuation_score:.1f} / {bd.valuation_score / 0.35:.0f}分  (权重 35%)")
-    details.append(f"技术因子: {bd.technical_score:.1f} / {bd.technical_score / 0.30:.0f}分  (权重 30%)")
-    details.append(f"趋势因子: {bd.trend_score:.1f} / {bd.trend_score / 0.20:.0f}分  (权重 20%)")
-    details.append(f"量能因子: {bd.volume_score:.1f} / {bd.volume_score / 0.10:.0f}分  (权重 10%)")
-    details.append(f"情绪因子: {bd.sentiment_score:.1f} / {bd.sentiment_score / 0.05:.0f}分  (权重 5%)")
+    wv = weights.get("valuation", 0.35) or 0.35
+    wt = weights.get("technical", 0.30) or 0.30
+    wtr = weights.get("trend", 0.20) or 0.20
+    wvo = weights.get("volume", 0.10) or 0.10
+    ws = weights.get("sentiment", 0.05) or 0.05
+    details.append(f"估值因子: {bd.valuation_score:.1f} / {bd.valuation_score / wv:.0f}分  (权重 {wv*100:.0f}%)")
+    details.append(f"技术因子: {bd.technical_score:.1f} / {bd.technical_score / wt:.0f}分  (权重 {wt*100:.0f}%)")
+    details.append(f"趋势因子: {bd.trend_score:.1f} / {bd.trend_score / wtr:.0f}分  (权重 {wtr*100:.0f}%)")
+    details.append(f"量能因子: {bd.volume_score:.1f} / {bd.volume_score / wvo:.0f}分  (权重 {wvo*100:.0f}%)")
+    details.append(f"情绪因子: {bd.sentiment_score:.1f} / {bd.sentiment_score / ws:.0f}分  (权重 {ws*100:.0f}%)")
     details.append("")
     details.append("=== 技术指标 ===")
     if analysis.ma_20:

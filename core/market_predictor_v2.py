@@ -13,6 +13,9 @@ V3 improvements:
 4. HARD RULE: score between -5 and +5 ALWAYS returns "flat/do not trade"
 5. Auto-learn: verification results feed back into confidence adjustment
 6. Every prediction archived for accuracy tracking
+
+import logging
+logger = logging.getLogger(__name__)
 """
 
 import json
@@ -46,7 +49,8 @@ def _fetch_realtime() -> Optional[dict]:
                 result["index_prev"] = float(parts[4])
                 result["index_chg"] = (result["index"] - result["index_prev"]) / result["index_prev"] * 100
         return result if result else None
-    except Exception:
+    except Exception as e:
+        logger.warning("获取实时行情失败: %s", e)
         return None
 
 
@@ -61,7 +65,8 @@ def _get_historical_accuracy() -> float:
             return 0.50
         correct = sum(1 for r in verified if r["correct"])
         return correct / len(verified)
-    except Exception:
+    except Exception as e:
+        logger.warning("读取历史准确率失败: %s", e)
         return 0.50
 
 
@@ -72,7 +77,8 @@ def predict() -> dict:
     try:
         df = pd.read_csv(".cache/prices_510050.csv", index_col=0, parse_dates=True)
         cl = df["close"]
-    except Exception:
+    except Exception as e:
+        logger.warning("读取510050历史数据失败: %s", e)
         return {"direction": "unknown", "confidence": 0, "error": "no history"}
 
     p = cl.iloc[-1]
