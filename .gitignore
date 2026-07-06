@@ -30,3 +30,4 @@ htmlcov/
 .prediction_history/
 .position_history/
 .gstack/
+*.xlsx
