@@ -78,6 +78,15 @@ def _get_name(code: str) -> str:
     return NAMES.get(code, "???")
 
 
+def _sort_key(r: dict) -> tuple:
+    """排序键：已触发排最前，然后按距区间从小到大。"""
+    if r["in_range"]:
+        return (0, 0)
+    if r["dist"].startswith("↓"):
+        return (0, float(r["dist"].strip("↓%")) + 0.01)
+    return (1, float(r["dist"].strip("↑%")))
+
+
 def main() -> None:
     """主入口：扫描所有持仓，判断卖出提醒条件，输出表格。"""
     now = datetime.now()
@@ -194,13 +203,6 @@ def main() -> None:
             })
 
     # ── 排序：已触发排最前，然后按距区间从小到大 ──
-    def _sort_key(r: dict) -> tuple:
-        if r["in_range"]:
-            return (0, 0)
-        if r["dist"].startswith("↓"):
-            return (0, float(r["dist"].strip("↓%")) + 0.01)
-        return (1, float(r["dist"].strip("↑%")))
-
     results.sort(key=_sort_key)
 
     # ── 输出表格 ──
@@ -214,6 +216,7 @@ def main() -> None:
             for s in skipped:
                 print(f"    {s['code']} {s['name']}: {s['reason']}")
         _print_footer(now, 0, len(position_files), low_buy_count)
+        return
 
     print(f"{'#':>3}  {'代码':<8} {'名称':<8} {'现价':>7} {'均价':>7} "
           f"{'历史最高':>9} {'目标区间':>16} {'距区间':>6} {'盈亏':>6}")
@@ -239,9 +242,7 @@ def main() -> None:
               f"（距历史最低 +{from_low_pct:.1f}%） → 可考虑出仓")
         print()
 
-    if triggered:
-        pass
-    else:
+    if not triggered:
         print("  本次无触发。")
         print()
 
