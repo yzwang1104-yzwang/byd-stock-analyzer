@@ -270,6 +270,47 @@ def _fetch_eastmoney_kline(stock_code: str, days: int) -> list[PriceBar]:
     return bars
 
 
+def _fetch_sina_kline(stock_code: str, days: int = 500) -> list[PriceBar]:
+    """从新浪财经获取 A 股历史日K线。
+
+    API: money.finance.sina.com.cn
+    返回 JSON 数组，每项含 day/open/high/low/close/volume。
+    """
+    prefix = "sz" if stock_code.startswith(("0", "3")) else "sh"
+    url = (
+        f"https://money.finance.sina.com.cn/quotes_service/api/"
+        f"json_v2.php/CN_MarketData.getKLineData?"
+        f"symbol={prefix}{stock_code}&scale=240&datalen={days}"
+    )
+    import json
+    text = _http_get_raw(url, timeout=10)
+    if not text:
+        raise RuntimeError(f"新浪 K 线返回为空: {stock_code}")
+
+    data = json.loads(text)
+    if not isinstance(data, list) or len(data) == 0:
+        raise RuntimeError(f"新浪 K 线数据格式异常: {stock_code}")
+
+    bars = []
+    for item in data:
+        try:
+            d = date.fromisoformat(item["day"])
+            bars.append(PriceBar(
+                date=d,
+                open=float(item["open"]),
+                high=float(item["high"]),
+                low=float(item["low"]),
+                close=float(item["close"]),
+                volume=int(item["volume"]),
+            ))
+        except (ValueError, KeyError) as e:
+            logger.warning(f"新浪跳过无效行: {item.get('day','?')} {e}")
+            continue
+
+    bars.sort(key=lambda b: b.date)
+    return bars
+
+
 def fetch_price_history(
     stock_code: str = STOCK_CODE,
     days: int = 500,
@@ -277,7 +318,7 @@ def fetch_price_history(
 ) -> list[PriceBar]:
     """获取 A 股历史日K线（前复权）。
 
-    优先腾讯 API（企业网络最稳定），东方财富备用。
+    降级链：腾讯 → 新浪 → 东方财富。
     """
     stock_code = _normalize_code(stock_code)
     cache_file = _cache_path(f"prices_{stock_code}.csv")
@@ -288,7 +329,7 @@ def fetch_price_history(
             logger.info(f"从缓存加载 {stock_code} 价格数据 ({len(rows)} 条)")
             return [_row_to_pricebar(r) for r in rows]
 
-    # 尝试腾讯 API（企业网络最稳定）
+    # 源1：腾讯
     bars = None
     try:
         logger.info(f"从腾讯获取 {stock_code} K线数据...")
@@ -296,7 +337,15 @@ def fetch_price_history(
     except Exception as e:
         logger.warning(f"腾讯 K 线失败: {e}")
 
-    # 回退东方财富
+    # 源2：新浪
+    if bars is None:
+        try:
+            logger.info(f"从新浪获取 {stock_code} K线数据...")
+            bars = _fetch_sina_kline(stock_code, days)
+        except Exception as e:
+            logger.warning(f"新浪 K 线失败: {e}")
+
+    # 源3：东方财富
     if bars is None:
         try:
             logger.info(f"从东方财富获取 {stock_code} K线数据...")
