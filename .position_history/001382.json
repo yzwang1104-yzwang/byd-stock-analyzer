@@ -1,0 +1,19 @@
+{
+  "stock_code": "001382",
+  "trigger_base": null,
+  "entries": [
+    {
+      "date": "2026-07-07",
+      "price": 15.7,
+      "shares": 100,
+      "entry_type": "initial"
+    }
+  ],
+  "adjustments": [
+    {
+      "date": "2026-07-11",
+      "amount": -5.0,
+      "note": "交易佣金+过户费"
+    }
+  ]
+}

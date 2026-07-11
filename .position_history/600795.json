@@ -1,0 +1,24 @@
+{
+  "stock_code": "600795",
+  "trigger_base": null,
+  "entries": [
+    {
+      "date": "2026-06-24",
+      "price": 4.71,
+      "shares": 100,
+      "entry_type": "initial"
+    }
+  ],
+  "adjustments": [
+    {
+      "date": "2026-07-11",
+      "amount": 14.1,
+      "note": "股息入账"
+    },
+    {
+      "date": "2026-07-11",
+      "amount": -5.0,
+      "note": "交易佣金+印花税+股息税"
+    }
+  ]
+}

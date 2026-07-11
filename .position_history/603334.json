@@ -1,0 +1,19 @@
+{
+  "stock_code": "603334",
+  "trigger_base": null,
+  "entries": [
+    {
+      "date": "2026-07-10",
+      "price": 32.49,
+      "shares": 100,
+      "entry_type": "initial"
+    }
+  ],
+  "adjustments": [
+    {
+      "date": "2026-07-11",
+      "amount": -8.4,
+      "note": "交易佣金+过户费"
+    }
+  ]
+}

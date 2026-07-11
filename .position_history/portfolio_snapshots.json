@@ -1,0 +1,39 @@
+[
+  {
+    "timestamp": "2026-06-17T13:59:55.297141",
+    "holdings": [
+      {
+        "code": "600104",
+        "name": "上汽集团",
+        "shares": 100,
+        "cost_price": 10.52,
+        "cost_total": 1052.0,
+        "current_price": 10.52,
+        "market_value": 1052.0,
+        "pnl": 0.0,
+        "pnl_pct": 0.0,
+        "open_today": 10.6,
+        "prev_close": 10.65
+      },
+      {
+        "code": "600370",
+        "name": "*ST三房",
+        "shares": 400,
+        "cost_price": 2.67,
+        "cost_total": 1068.0,
+        "current_price": 1.66,
+        "market_value": 664.0,
+        "pnl": -404.0,
+        "pnl_pct": -37.83,
+        "open_today": 1.63,
+        "prev_close": 1.58
+      }
+    ],
+    "summary": {
+      "total_cost": 2120.0,
+      "total_value": 1716.0,
+      "total_pnl": -404.0,
+      "total_pnl_pct": -19.06
+    }
+  }
+]

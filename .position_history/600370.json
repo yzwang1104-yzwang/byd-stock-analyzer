@@ -1,0 +1,19 @@
+{
+  "stock_code": "600370",
+  "trigger_base": 2.67,
+  "entries": [
+    {
+      "date": "2026-06-15",
+      "price": 2.6725,
+      "shares": 400,
+      "entry_type": "initial"
+    }
+  ],
+  "adjustments": [
+    {
+      "date": "2026-07-11",
+      "amount": -5.8,
+      "note": "交易佣金+过户费"
+    }
+  ]
+}

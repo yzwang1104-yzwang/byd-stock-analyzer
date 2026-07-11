@@ -1,0 +1,19 @@
+{
+  "stock_code": "603395",
+  "trigger_base": null,
+  "entries": [
+    {
+      "date": "2026-07-02",
+      "price": 21.0323,
+      "shares": 100,
+      "entry_type": "initial"
+    }
+  ],
+  "adjustments": [
+    {
+      "date": "2026-07-11",
+      "amount": -6.3,
+      "note": "交易佣金+过户费"
+    }
+  ]
+}

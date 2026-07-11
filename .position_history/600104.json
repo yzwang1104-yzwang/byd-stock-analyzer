@@ -1,0 +1,25 @@
+{
+  "stock_code": "600104",
+  "trigger_base": null,
+  "entries": [
+    {
+      "date": "2026-06-17",
+      "price": 10.52,
+      "shares": 100,
+      "entry_type": "initial"
+    },
+    {
+      "date": "2026-06-24",
+      "price": 10.24,
+      "shares": 100,
+      "entry_type": "add_1"
+    }
+  ],
+  "adjustments": [
+    {
+      "date": "2026-07-11",
+      "amount": -6.2,
+      "note": "交易佣金+过户费"
+    }
+  ]
+}
