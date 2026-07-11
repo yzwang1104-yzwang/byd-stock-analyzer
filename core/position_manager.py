@@ -18,18 +18,37 @@ class Entry:
 
 
 @dataclass
+class Adjustment:
+    """股息/费用调整记录。"""
+    date: str
+    amount: float   # 正=股息收入，负=费用支出
+    note: str = ""  # "股息入账" / "交易佣金" / "印花税" 等
+
+
+@dataclass
 class Position:
     stock_code: str
     entries: list[Entry] = field(default_factory=list)
+    adjustments: list[Adjustment] = field(default_factory=list)
     trigger_base: float | None = None  # 手动覆盖加仓基线
 
     @property
     def avg_cost(self) -> float:
+        """考虑股息和费用后的真实成本均价。"""
         if not self.entries:
             return 0.0
         total_cost = sum(e.price * e.shares for e in self.entries)
         total_shares = sum(e.shares for e in self.entries)
-        return total_cost / total_shares if total_shares > 0 else 0.0
+        if total_shares == 0:
+            return 0.0
+        # 费用增加成本，股息降低成本
+        net_cost = total_cost - self._net_adjustments
+        return net_cost / total_shares
+
+    @property
+    def _net_adjustments(self) -> float:
+        """净调整额 = 股息收入 - 费用支出。"""
+        return sum(a.amount for a in self.adjustments)
 
     @property
     def total_shares(self) -> int:
@@ -70,7 +89,7 @@ class Position:
         if not self.entries:
             return {"pnl": 0.0, "pnl_pct": 0.0}
         pnl = (current_price - self.avg_cost) * self.total_shares
-        pnl_pct = (current_price / self.avg_cost - 1) * 100
+        pnl_pct = (current_price / self.avg_cost - 1) * 100 if self.avg_cost else 0
         return {"pnl": round(pnl, 2), "pnl_pct": round(pnl_pct, 2)}
 
 
@@ -83,7 +102,13 @@ def load_position(stock_code: str) -> Optional[Position]:
     try:
         data = json.loads(path.read_text())
         entries = [Entry(**e) for e in data.get("entries", [])]
-        return Position(stock_code=data["stock_code"], entries=entries, trigger_base=data.get("trigger_base"))
+        adjustments = [Adjustment(**a) for a in data.get("adjustments", [])]
+        return Position(
+            stock_code=data["stock_code"],
+            entries=entries,
+            adjustments=adjustments,
+            trigger_base=data.get("trigger_base"),
+        )
     except (json.JSONDecodeError, KeyError):
         return None
 
@@ -94,7 +119,14 @@ def save_position(pos: Position) -> None:
     data = {
         "stock_code": pos.stock_code,
         "trigger_base": pos.trigger_base,
-        "entries": [{"date": e.date, "price": e.price, "shares": e.shares, "entry_type": e.entry_type} for e in pos.entries],
+        "entries": [
+            {"date": e.date, "price": e.price, "shares": e.shares, "entry_type": e.entry_type}
+            for e in pos.entries
+        ],
+        "adjustments": [
+            {"date": a.date, "amount": a.amount, "note": a.note}
+            for a in pos.adjustments
+        ],
     }
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
@@ -109,6 +141,26 @@ def add_entry(stock_code: str, price: float, shares: int, entry_date: Optional[s
         entry_date = date.today().isoformat()
     etype = "initial" if not pos.entries else f"add_{pos.add_count + 1}"
     pos.entries.append(Entry(date=entry_date, price=price, shares=shares, entry_type=etype))
+    save_position(pos)
+    return pos
+
+
+def add_dividend(stock_code: str, amount: float, note: str = "股息入账") -> Position:
+    """记录股息收入（降低平均成本）。"""
+    pos = load_position(stock_code)
+    if not pos:
+        raise ValueError(f"未找到持仓: {stock_code}")
+    pos.adjustments.append(Adjustment(date=date.today().isoformat(), amount=amount, note=note))
+    save_position(pos)
+    return pos
+
+
+def add_fee(stock_code: str, amount: float, note: str = "交易费用") -> Position:
+    """记录交易费用（增加平均成本）。amount 为正值。"""
+    pos = load_position(stock_code)
+    if not pos:
+        raise ValueError(f"未找到持仓: {stock_code}")
+    pos.adjustments.append(Adjustment(date=date.today().isoformat(), amount=-abs(amount), note=note))
     save_position(pos)
     return pos
 
