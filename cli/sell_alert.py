@@ -28,8 +28,13 @@ logger = logging.getLogger(__name__)
 
 # ====== 阈值配置 ======
 LOW_BUY_THRESHOLD = 1.15   # 买入均价 ≤ 历史最低 × 1.15 视为低点买入
-SELL_LOWER = 0.70          # 目标区间下边界：历史最高 × 70%
-SELL_UPPER = 0.80          # 目标区间上边界：历史最高 × 80%
+SELL_LOWER = 0.70          # 默认目标区间下边界：历史最高 × 70%
+SELL_UPPER = 0.80          # 默认目标区间上边界：历史最高 × 80%
+
+# 单只股票自定义卖出比例（覆盖默认值）
+CUSTOM_SELL: dict[str, tuple[float, float]] = {
+    "000690": (0.90, 0.95),  # 宝新能源：提高到90%-95%
+}
 
 DISCLAIMER = "分析结果仅供参考，不构成任何投资建议。投资有风险，入市需谨慎。"
 
@@ -95,7 +100,7 @@ def main() -> None:
     now = datetime.now()
     print(f"=== 卖出提醒扫描 === {now.strftime('%Y-%m-%d %H:%M')}")
     print()
-    print("  低点买入持仓 → 接近最高点 70%-80% 出仓区间")
+    print("  低点买入持仓 → 接近卖出区间 (默认70%-80%，可自定义)")
     print()
 
     # ── 扫描持仓目录 ──
@@ -168,8 +173,13 @@ def main() -> None:
         is_low_buy = avg_cost <= low_all * LOW_BUY_THRESHOLD
 
         # ── 条件 2：目标区间判断 ──
-        target_low = high_all * SELL_LOWER
-        target_high = high_all * SELL_UPPER
+        # 检查是否有自定义卖出比例
+        if code in CUSTOM_SELL:
+            sell_lower, sell_upper = CUSTOM_SELL[code]
+        else:
+            sell_lower, sell_upper = SELL_LOWER, SELL_UPPER
+        target_low = high_all * sell_lower
+        target_high = high_all * sell_upper
         in_range = target_low <= cur <= target_high
 
         if in_range:
