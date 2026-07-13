@@ -48,6 +48,21 @@ def _get_name(code: str) -> str:
     return "?"
 
 
+def _get_realtime_price(code: str) -> float | None:
+    """从腾讯实时行情获取现价，失败返回 None。"""
+    try:
+        prefix = "nq" if code.startswith(("9", "8")) else ("sz" if code.startswith(("0", "3")) else "sh")
+        url = f"https://qt.gtimg.cn/q={prefix}{code}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        raw = urllib.request.urlopen(req, timeout=3, context=_ssl_ctx).read()
+        for line in raw.decode("gbk").split("\n"):
+            if "~" in line and "none_match" not in line:
+                return float(line.split("~")[3])
+    except Exception:
+        pass
+    return None
+
+
 def _is_st(code: str) -> bool:
     if code in ST_CODES:
         return True
@@ -93,7 +108,10 @@ def scan_all(progress: bool = True) -> list[dict]:
                 st_skip += 1
                 continue
 
-            cur = data.latest_price
+            # 优先使用腾讯实时行情，K线收盘价备用
+            cur = _get_realtime_price(code)
+            if cur is None:
+                cur = data.latest_price
             closes = [p.close for p in data.prices]
             all_high = max(p.high for p in data.prices)
             all_low = min(p.low for p in data.prices)
