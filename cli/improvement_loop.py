@@ -204,8 +204,19 @@ def print_summary(result: dict) -> None:
     c = s["3_compare"]
     b = s["8_backtest"]
 
+    # 实时上证指数（sh000001，不用ETF）
+    try:
+        import urllib.request, ssl
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request("https://qt.gtimg.cn/q=sh000001", headers={"User-Agent": "Mozilla/5.0"})
+        sh = urllib.request.urlopen(req, timeout=3, context=ctx).read().decode("gbk").split("~")
+        sh_cur, sh_prev = float(sh[3]), float(sh[4])
+        sh_info = f" 上证{sh_cur:.0f}({(sh_cur/sh_prev-1)*100:+.2f}%)"
+    except Exception:
+        sh_info = ""
+
     print(f"[1预测] python -m cli.main predict（见上方完整输出）")
-    print(f"[2抓行情] {f['stock']} 现价{f['price']} 评分{f['score']} {f['action']} 仓位{f['position_pct']}%")
+    print(f"[2抓行情] {f['stock']} 现价{f['price']} 评分{f['score']} {f['action']} 仓位{f['position_pct']}%{sh_info}")
     print(f"  方向:{f['direction']}({f['dir_confidence']}%置信) PE:{f['pe_pct']:.0f}%分位 PB:{f['pb_pct']:.0f}%分位 RSI:{f['rsi']:.0f}")
     if f["buy_signals"]:
         print(f"  买入信号: {' | '.join(f['buy_signals'])}")
