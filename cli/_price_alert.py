@@ -11,7 +11,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 # 监控配置: 代码 → 提醒价位
 ALERTS = {
     "002594": [84, 80, 78],  # 比亚迪: 84(关注), 80(买点), 78(绝佳)
-    "600438": [10.75],        # 通威: 加仓触发价
+    "600438": [9.52],         # 通威: 加仓#2触发价
 }
 
 _ssl_ctx = ssl.create_default_context()

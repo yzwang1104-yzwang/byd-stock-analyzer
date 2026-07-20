@@ -7,12 +7,23 @@
       "price": 11.95,
       "shares": 100,
       "entry_type": "initial"
+    },
+    {
+      "date": "2026-07-14",
+      "price": 10.58,
+      "shares": 100,
+      "entry_type": "add_1"
     }
   ],
   "adjustments": [
     {
       "date": "2026-07-11",
       "amount": -5.0,
+      "note": "交易佣金+过户费"
+    },
+    {
+      "date": "2026-07-14",
+      "amount": -5.01,
       "note": "交易佣金+过户费"
     }
   ]

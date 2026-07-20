@@ -100,7 +100,7 @@ def main() -> None:
     now = datetime.now()
     print(f"=== 卖出提醒扫描 === {now.strftime('%Y-%m-%d %H:%M')}")
     print()
-    print("  低点买入持仓 → 接近卖出区间 (默认70%-80%，可自定义)")
+    print("  低点买入持仓 → 接近卖出区间 (默认95%-98%，可自定义)")
     print()
 
     # ── 扫描持仓目录 ──
