@@ -7,6 +7,7 @@
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -98,7 +99,9 @@ def test_close_position_writes_utf8(monkeypatch, tmp_path):
 
     summary = pm.close_position("600795", sell_price=5.10)
 
-    closed_path = tmp_path / ".closed_positions" / "600795_2026-08-17.json"
+    # 归档文件名带当天日期，不能硬编码（跨零点运行会失败）
+    today = date.today().strftime("%Y-%m-%d")
+    closed_path = tmp_path / ".closed_positions" / f"600795_{today}.json"
     raw = closed_path.read_bytes()
     # UTF-8 必须能解码(写端曾无编码参数, 在 GBK locale 下会写成 GBK)
     decoded = raw.decode("utf-8")

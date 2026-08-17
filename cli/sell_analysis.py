@@ -1,21 +1,71 @@
 """卖出分析脚本 — 评估持仓股票的卖出优先级。"""
 import sys, io, os
-if sys.platform == "win32":
+if __name__ == "__main__" and sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 import numpy as np
 import pandas as pd
 import urllib.request
+from datetime import datetime
 
 CACHE_DIR = ".cache"
-PORTFOLIO = [
-    ("001382","新亚电缆",100,15.65), ("002700","万憬能源",100,5.23), ("603395","红四方",100,20.97),
-    ("000690","宝新能源",100,4.69), ("600795","国电电力",100,4.80), ("000983","山西焦煤",100,6.30),
-    ("600104","上汽集团",200,10.35), ("600438","通威股份",200,11.21), ("600299","安迪苏",100,8.13),
-    ("603970","中农立华",100,9.85), ("002327","富安娜",100,6.30), ("603334","丰倍生物",100,32.41),
-    ("002469","三维化学",100,5.60), ("603097","江苏华辰",100,15.48), ("603370","华新精科",100,33.03),
-    ("600560","金自天正",100,10.58), ("002855","捷荣技术",100,9.51), ("600370","*ST三房",400,2.66),
-]
+POSITION_DIR = ".position_history"
+
+def _load_portfolio() -> list[tuple]:
+    """从 .position_history/ 读取持仓（唯一数据源）。"""
+    import json
+    stocks = []
+    if not os.path.isdir(POSITION_DIR):
+        return stocks
+    for fname in sorted(os.listdir(POSITION_DIR)):
+        if not fname.endswith(".json") or fname == "portfolio_snapshots.json":
+            continue
+        code = fname.replace(".json", "")
+        if len(code) != 6 or not code.isdigit():
+            continue
+        try:
+            data = json.loads(open(os.path.join(POSITION_DIR, fname), "r", encoding="utf-8").read())
+            entries = data.get("entries", [])
+            if not entries:
+                continue
+            total_shares = sum(e.get("shares", 0) for e in entries)
+            total_cost = sum(e.get("price", 0) * e.get("shares", 0) for e in entries)
+            adjustments = data.get("adjustments", [])
+            net_adj = sum(a.get("amount", 0) for a in adjustments)
+            avg_price = (total_cost - net_adj) / total_shares if total_shares > 0 else 0
+            # 已平仓持仓（total_shares=0）无仓位可卖，跳过，否则 avg_price=0 导致除零
+            if total_shares <= 0:
+                continue
+            stocks.append((code, code, total_shares, round(avg_price, 4)))
+        except (json.JSONDecodeError, KeyError, ValueError):
+            continue
+    return stocks
+
+PORTFOLIO = _load_portfolio()
+
+
+def _fetch_names(codes: list[str]) -> dict[str, str]:
+    """腾讯批量行情接口获取股票名称（每次最多 50 只）。"""
+    names: dict[str, str] = {}
+    for i in range(0, len(codes), 50):
+        batch = codes[i:i + 50]
+        symbols = ",".join(
+            f"sh{c}" if c.startswith(("6", "9")) else f"sz{c}" for c in batch
+        )
+        url = f"https://qt.gtimg.cn/q={symbols}"
+        try:
+            # 腾讯响应为 GBK 编码
+            text = urllib.request.urlopen(url, timeout=10).read().decode("gbk", errors="replace")
+            for line in text.split(";"):
+                line = line.strip()
+                if "~" not in line:
+                    continue
+                parts = line.split("~")
+                if len(parts) > 2 and parts[2].isdigit():
+                    names[parts[2]] = parts[1]
+        except Exception:
+            continue
+    return names
 
 
 def analyze_sell(code: str) -> dict | None:
@@ -154,17 +204,18 @@ def main():
     print("=" * 100)
     print("  📤 持仓股票卖出优先级分析")
     print("=" * 100)
-    print(f"  数据截止: K线缓存最新日期 | 分析时间: 2026-07-27")
+    print(f"  数据截止: K线缓存最新日期 | 分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print()
     print("  卖出评分逻辑: 趋势DN(+15) + RSI超买(+15) + 飞刀(+20) + 距高近(+12)")
     print("               + MACD死叉(+8) + BB上轨(+10) - 已深跌(-10) - 近最低(-8)")
     print("              基础50分 → 越高越该卖")
 
     results = []
+    names = _fetch_names([row[0] for row in PORTFOLIO])
     for code, name, shares, avg in PORTFOLIO:
         r = analyze_sell(code)
         if r:
-            r["name"] = name
+            r["name"] = names.get(code, name)
             r["shares"] = shares
             r["avg_price"] = avg
             r["pnl_pct"] = (r["price"]-avg)/avg*100
