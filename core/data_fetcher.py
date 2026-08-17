@@ -138,7 +138,7 @@ def _fetch_tencent_realtime(stock_code: str) -> dict:
     """
     prefix = _tencent_prefix(stock_code)
     url = f"https://qt.gtimg.cn/q={prefix}{stock_code}"
-    text = _http_get_raw(url, timeout=10)
+    text = _http_get_raw(url, timeout=10, encoding="gbk")  # 腾讯响应为 GBK
     if not text or "~" not in text:
         raise RuntimeError(f"腾讯实时行情数据为空: {stock_code}")
 
@@ -180,15 +180,18 @@ def _fetch_tencent_realtime(stock_code: str) -> dict:
     }
 
 
-def _http_get_raw(url: str, timeout: int = 10) -> str | None:
-    """HTTP GET 返回原始文本。"""
+def _http_get_raw(url: str, timeout: int = 10, encoding: str = "utf-8") -> str | None:
+    """HTTP GET 返回原始文本。
+
+    数据源编码不同: 腾讯 qt.gtimg.cn 为 GBK, 新浪为 UTF-8, 由调用方指定。
+    """
     import urllib.request
     try:
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         })
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            return resp.read().decode(encoding, errors="replace")
     except Exception as e:
         logger.warning(f"HTTP GET 失败: {url[:80]}... {e}")
         return None

@@ -30,21 +30,21 @@ def test_not_low_buy():
 # ---- 测试：目标区间判断 ----
 
 def test_in_target_range():
-    """当前价 150，历史最高 200 → 目标区间 140~160 → 150 在区间内 ✅"""
+    """当前价 193，历史最高 200 → 目标区间 190~196 → 193 在区间内 ✅"""
     from cli.sell_alert import SELL_LOWER, SELL_UPPER
 
-    cur = 150.0
+    cur = 193.0
     high_all = 200.0
-    target_low = high_all * SELL_LOWER   # 140
-    target_high = high_all * SELL_UPPER  # 160
+    target_low = high_all * SELL_LOWER   # 190
+    target_high = high_all * SELL_UPPER  # 196
     assert target_low <= cur <= target_high
 
 
 def test_below_target_range():
-    """当前价 80，历史最高 200 → 目标区间 140~160 → 80 在区间下 ❌"""
+    """当前价 150，历史最高 200 → 目标区间 190~196 → 150 在区间下 ❌"""
     from cli.sell_alert import SELL_LOWER, SELL_UPPER
 
-    cur = 80.0
+    cur = 150.0
     high_all = 200.0
     target_low = high_all * SELL_LOWER
     target_high = high_all * SELL_UPPER
@@ -52,10 +52,10 @@ def test_below_target_range():
 
 
 def test_above_target_range():
-    """当前价 170，历史最高 200 → 目标区间 140~160 → 170 在区间上 ❌"""
+    """当前价 198，历史最高 200 → 目标区间 190~196 → 198 在区间上 ❌"""
     from cli.sell_alert import SELL_LOWER, SELL_UPPER
 
-    cur = 170.0
+    cur = 198.0
     high_all = 200.0
     target_low = high_all * SELL_LOWER
     target_high = high_all * SELL_UPPER
@@ -97,10 +97,10 @@ def test_dist_label_already_in_range():
     """已触发的显示'已触发'"""
     from cli.sell_alert import SELL_LOWER, SELL_UPPER
 
-    cur = 150.0
+    cur = 193.0
     high_all = 200.0
-    target_low = high_all * SELL_LOWER   # 140
-    target_high = high_all * SELL_UPPER  # 160
+    target_low = high_all * SELL_LOWER   # 190
+    target_high = high_all * SELL_UPPER  # 196
     in_range = target_low <= cur <= target_high
     assert in_range
 
@@ -114,19 +114,19 @@ def test_dist_label_below():
 
     cur = 80.0
     high_all = 200.0
-    target_low = high_all * SELL_LOWER  # 140
+    target_low = high_all * SELL_LOWER  # 190
     gap_pct = (target_low / cur - 1) * 100
     dist = f"↓{gap_pct:.0f}%"
-    assert dist == "↓75%"
+    assert dist == "↓138%"
 
 
 def test_dist_label_above():
     """高于区间上边界 → 显示 ↑百分比（已超出上边界多少）"""
     from cli.sell_alert import SELL_UPPER
 
-    cur = 180.0
+    cur = 198.0
     high_all = 200.0
-    target_high = high_all * SELL_UPPER  # 160
+    target_high = high_all * SELL_UPPER  # 196
     gap_pct = (cur / target_high - 1) * 100
     dist = f"↑{gap_pct:.0f}%"
-    assert dist == "↑12%"
+    assert dist == "↑1%"

@@ -195,7 +195,8 @@ def main() -> None:
 
         result = {
             "code": code,
-            "name": _get_name(code),
+            # 名称优先取腾讯实时行情 f57（akshare 字典可能 segfault 为空）
+            "name": quote.get("f57") or _get_name(code),
             "cur": cur,
             "avg_cost": avg_cost,
             "high_all": high_all,

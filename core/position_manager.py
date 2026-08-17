@@ -100,7 +100,8 @@ def load_position(stock_code: str) -> Optional[Position]:
     if not path.exists():
         return None
     try:
-        data = json.loads(path.read_text())
+        # 写端 save_position() 固定 UTF-8, 读端必须一致, 否则 GBK locale 崩溃
+        data = json.loads(path.read_text(encoding="utf-8"))
         entries = [Entry(**e) for e in data.get("entries", [])]
         adjustments = [Adjustment(**a) for a in data.get("adjustments", [])]
         return Position(
@@ -128,7 +129,7 @@ def save_position(pos: Position) -> None:
             for a in pos.adjustments
         ],
     }
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def add_entry(stock_code: str, price: float, shares: int, entry_date: Optional[str] = None) -> Position:
@@ -163,6 +164,71 @@ def add_fee(stock_code: str, amount: float, note: str = "交易费用") -> Posit
     pos.adjustments.append(Adjustment(date=date.today().isoformat(), amount=-abs(amount), note=note))
     save_position(pos)
     return pos
+
+
+# ====== 卖出平仓 ======
+
+CLOSED_DIR = Path(".closed_positions")
+
+
+def close_position(stock_code: str, sell_price: float, sell_date: Optional[str] = None) -> dict:
+    """平仓卖出，归档持仓文件，返回盈亏汇总。"""
+    pos = load_position(stock_code)
+    if not pos:
+        raise ValueError(f"未找到持仓: {stock_code}")
+    if sell_date is None:
+        sell_date = date.today().isoformat()
+
+    # 计算盈亏
+    avg_cost = pos.avg_cost
+    total_shares = pos.total_shares
+    total_cost = avg_cost * total_shares
+    total_revenue = sell_price * total_shares
+    gross_profit = total_revenue - total_cost
+    gross_pct = (sell_price / avg_cost - 1) * 100 if avg_cost > 0 else 0
+
+    # 扣除费用估计（佣金0.03%+印花税0.1%+过户费0.002%，双向）
+    fee_estimate = total_revenue * 0.00132  # ~0.132%
+    net_profit = gross_profit - fee_estimate
+
+    summary = {
+        "stock_code": stock_code,
+        "sell_date": sell_date,
+        "sell_price": sell_price,
+        "avg_cost": round(avg_cost, 4),
+        "total_shares": total_shares,
+        "holding_days": _calc_holding_days(pos.entries[0].date, sell_date),
+        "total_cost": round(total_cost, 2),
+        "total_revenue": round(total_revenue, 2),
+        "gross_profit": round(gross_profit, 2),
+        "gross_pct": round(gross_pct, 2),
+        "fee_estimate": round(fee_estimate, 2),
+        "net_profit": round(net_profit, 2),
+        "entries": [{"date": e.date, "price": e.price, "shares": e.shares} for e in pos.entries],
+        "adjustments": [{"date": a.date, "amount": a.amount, "note": a.note} for a in pos.adjustments],
+    }
+
+    # 归档到 closed_positions
+    CLOSED_DIR.mkdir(parents=True, exist_ok=True)
+    closed_path = CLOSED_DIR / f"{stock_code}_{sell_date}.json"
+    closed_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # 删除活跃持仓文件
+    pos_path = POSITION_FILE / f"{stock_code}.json"
+    if pos_path.exists():
+        pos_path.unlink()
+
+    return summary
+
+
+def _calc_holding_days(buy_date: str, sell_date: str) -> int:
+    """计算持仓天数。"""
+    try:
+        d1 = date.fromisoformat(buy_date)
+        d2 = date.fromisoformat(sell_date)
+        return (d2 - d1).days
+    except (ValueError, TypeError):
+        return 0
 
 
 # ====== 加仓判断 ======
