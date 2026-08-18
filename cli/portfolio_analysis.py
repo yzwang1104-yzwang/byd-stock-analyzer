@@ -362,28 +362,40 @@ def get_realtime_price(code: str) -> float | None:
 
 
 def parse_portfolio() -> list[dict]:
-    """解析 portfolio.txt 获取持仓列表。"""
+    """从 .position_history/ 目录读取持仓列表（唯一数据源）。"""
+    import json
     stocks = []
-    if not os.path.exists(PORTFOLIO_FILE):
-        print("❌ portfolio.txt 不存在")
+    pos_dir = ".position_history"
+    if not os.path.isdir(pos_dir):
+        print("❌ .position_history/ 目录不存在")
         return stocks
 
-    with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith(("-", "=", "持", "代", "总", " ")):
+    for fname in sorted(os.listdir(pos_dir)):
+        if not fname.endswith(".json") or fname == "portfolio_snapshots.json":
+            continue
+        code = fname.replace(".json", "")
+        if len(code) != 6 or not code.isdigit():
+            continue
+        try:
+            data = json.loads(open(os.path.join(pos_dir, fname), "r", encoding="utf-8").read())
+            entries = data.get("entries", [])
+            if not entries:
                 continue
-            parts = line.split()
-            if len(parts) >= 3 and parts[0].isdigit() and len(parts[0]) == 6:
-                try:
-                    stocks.append({
-                        "code": parts[0],
-                        "name": parts[1],
-                        "shares": int(parts[2]),
-                        "avg_price": float(parts[3]),
-                    })
-                except (ValueError, IndexError):
-                    continue
+            total_shares = sum(e.get("shares", 0) for e in entries)
+            total_cost = sum(e.get("price", 0) * e.get("shares", 0) for e in entries)
+            adjustments = data.get("adjustments", [])
+            net_adj = sum(a.get("amount", 0) for a in adjustments)
+            avg_price = (total_cost - net_adj) / total_shares if total_shares > 0 else 0
+            if total_shares <= 0:
+                continue  # 已平仓持仓无仓位可分析，排除（603097/600795 曾混入 23 只列表）
+            stocks.append({
+                "code": code,
+                "name": data.get("stock_code", code),  # placeholder, real name from API
+                "shares": total_shares,
+                "avg_price": round(avg_price, 4),
+            })
+        except (json.JSONDecodeError, KeyError, ValueError):
+            continue
     return stocks
 
 
