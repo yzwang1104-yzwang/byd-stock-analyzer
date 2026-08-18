@@ -15,6 +15,10 @@ import logging
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
+
+# 直接运行 python cli/sell_alert.py 时 sys.path[0]=cli/，core 包找不到
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Windows UTF-8 编码（仅直接运行时，不影响 pytest 的 stdout capture）
 if __name__ == "__main__" and sys.platform == "win32":
