@@ -2850,3 +2850,72 @@ f41f7ea8 15:05 收盘备份
 ```
 
 **最后更新:** 2026-08-17 10:35 CST
+
+---
+
+## 三十三、2026-08-18 会话记录
+
+### 时间线
+
+| 时间 | 事件 |
+|------|------|
+| 08-17 晚 | 用户问「今天适合卖出的股票」→ cli/sell_analysis.py ZeroDivisionError 崩溃 |
+| 08-18 08:00 | TDD 修复除零：已平仓持仓过滤（603097/600795 sell 条目抵消后 avg=0），新增 test_sell_analysis.py |
+| 08:00 | 附带修复：名称列显示代码 → 腾讯批量接口取 f57；分析时间硬编码 07-27 → datetime.now() |
+| 08:03 | 用户指出「实时日期是 8月17日」→ 数据截止改为从各持仓 last_date 动态取最大值（d07fa8a） |
+| 08:03 | 用户纠正星期：8-17 是周一、8-18 是周二（我误说周五，代码验证 Monday/Tuesday） |
+| 08:14 | 用户设置利润提醒：山西焦煤利润 120 元、002700 利润 280 元时提醒卖出 |
+| 08:14 | 新建 cli/profit_alert.py + 注册 cron（盘中 7,37 分 × 30 分钟） |
+| 08:14 | **发现 sell_alert.py 直接运行同样 ModuleNotFoundError**（sys.path[0]=cli/）→ 两脚本加 sys.path.insert |
+| 08:17 | 「持仓分析」→ 14 列表格固化成正版脚本 cli/position_table.py |
+| 盘中 | 利润提醒 cron 触发 5 次（09:11-11:11），均未达标 |
+| 11:1x | **用户要求「停止所有定时任务」** → 11 个任务全部删除，记忆更新「勿自动重建」 |
+| 11:2x | 用户要求「更新 claude.md」→ 本节 |
+
+### 除零崩溃根因（第三处同根因）
+
+- `sell_analysis._load_portfolio()` 和 `portfolio_analysis.parse_portfolio()` 都不过滤已平仓持仓：sell 条目（负股数）抵消后 total_shares=0 → avg_price=0 → `pnl_pct = (price-avg)/avg*100` 除零
+- sell_alert.py 早有先例 `if pos.total_shares == 0: continue`——新脚本 position_table.py 一开始就排除了
+- **规范：所有持仓扫描脚本第一步必须过滤 total_shares <= 0**
+
+### 利润提醒需求澄清（重要交互教训）
+
+用户原话「山西焦煤涨到120元，002700涨到280元提醒我卖出」——现价 6.77/6.36，17 倍/44 倍完全不现实。我用 AskUserQuestion 问「是否漏小数点」被拒绝，用户直接澄清：**「利润 涨到 120/280 元」——是浮动盈亏金额，不是股价**。
+
+教训：**先看用户持仓成本再问**。两只都是 100 股，120/280 元利润 = 股价涨 1.2/2.8 元（7.50/8.03 元），完全合理。价格单位歧义应优先用持仓上下文消解，而不是预设"小数点漏写"。
+
+### cli 脚本直接运行的 import 隐患
+
+- `python cli/x.py` 时 sys.path[0]=cli/ 目录，`import core` 失败；pytest 下因 sys.path.insert 而通过 → 测试全绿但直接运行崩溃
+- **cron 定时任务每天直接运行这些脚本**，此隐患会让定时任务静默失败
+- 修复：sell_alert.py / profit_alert.py 头部加 `sys.path.insert(0, str(Path(__file__).resolve().parent.parent))`
+- 遗留：grep 其他 cli 脚本是否 import core 却无此处理（market_predictor 等，与 08-17 编码隐患清单合并处理）
+
+### 14 列持仓表固化为正式脚本
+
+- 之前每次「持仓分析」都是临时 python -c 生成 14 列表（07-28 定版格式）
+- 本次固化为 `cli/position_table.py`：position_history（排除已平仓）→ 腾讯批量行情（GBK）→ .cache 历史最高 → 95% 目标 → 潜在利润降序
+- 21 只活跃持仓：总投入 27,409 | 盈亏 +866 (+3.2%) | 潜在利润空间 37,874
+
+### 定时任务全部停止
+
+- 用户盘中要求「停止所有定时任务」→ 11 个全部删除（启动检查/10步循环/买入×2/卖出×3/Dashboard×3/利润提醒×1）
+- 利润提醒目标价保留在 profit_alert.py PROFIT_TARGETS，手动运行即可
+- 记忆已更新：不自动重建，用户要求时才恢复
+
+### 其他修复
+
+- test_close_position_writes_utf8 硬编码归档文件名 2026-08-17 → 跨零点失败 → 改 `date.today()`
+- sell_analysis.py stdout 包装加 `__name__ == "__main__"` 保护（import 时替换 pytest capture 导致 teardown 报错）
+
+### 当前状态
+
+```
+持仓: 21只活跃 | 总盈亏 +866 (+3.2%)
+利润提醒目标: 山西焦煤 120元(42%) / 万憬能源 280元(42%) — 未达标，脚本保留
+卖出建议: 4只强烈卖出(*ST三房止损/三维/万憬/丰倍) + 9只考虑
+测试: 75 PASS (+1 回归) | Git: 4 commits push ✅
+定时任务: 全部停止（用户要求，勿自动重建）
+```
+
+**最后更新:** 2026-08-18 11:30 CST
