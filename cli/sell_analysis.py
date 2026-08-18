@@ -204,7 +204,6 @@ def main():
     print("=" * 100)
     print("  📤 持仓股票卖出优先级分析")
     print("=" * 100)
-    print(f"  数据截止: K线缓存最新日期 | 分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print()
     print("  卖出评分逻辑: 趋势DN(+15) + RSI超买(+15) + 飞刀(+20) + 距高近(+12)")
     print("               + MACD死叉(+8) + BB上轨(+10) - 已深跌(-10) - 近最低(-8)")
@@ -224,6 +223,10 @@ def main():
 
     results.sort(key=lambda x: x["sell_score"], reverse=True)
 
+    # 数据截止 = 各持仓 K 线缓存中最新的一天（开盘前为上一交易日收盘）
+    latest_date = max((r["last_date"] for r in results), default="")
+    print()
+    print(f"  数据截止: {latest_date} | 分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print()
     print("═" * 100)
     print("  📊 全部持仓卖出排名")
