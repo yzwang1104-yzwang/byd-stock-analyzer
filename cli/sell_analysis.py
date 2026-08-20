@@ -3,6 +3,9 @@ import sys, io, os
 if __name__ == "__main__" and sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+import json
+import re
+
 import numpy as np
 import pandas as pd
 import urllib.request
@@ -68,16 +71,77 @@ def _fetch_names(codes: list[str]) -> dict[str, str]:
     return names
 
 
-def analyze_sell(code: str) -> dict | None:
-    price_path = os.path.join(CACHE_DIR, f"prices_{code}.csv")
-    if not os.path.exists(price_path):
-        return None
+def _fetch_kline_live(code: str) -> pd.DataFrame | None:
+    """腾讯 fqkline 实时拉取前复权日线（约640条），失败返回 None。"""
+    prefix = "sh" if code.startswith(("6", "9")) else "sz"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={prefix}{code},day,,,2000,qfq"
     try:
-        df = pd.read_csv(price_path, index_col=0, parse_dates=True)
-        if len(df) < 50:
+        raw = urllib.request.urlopen(url, timeout=15).read().decode("utf-8")
+        node = json.loads(raw).get("data", {})
+        if not isinstance(node, dict):
             return None
+        days = node.get(f"{prefix}{code}", {}).get("qfqday") or node.get(f"{prefix}{code}", {}).get("day")
+        if not days:
+            return None
+        # 字段序: [date, open, close, high, low, volume]
+        rows = [[d[0], float(d[1]), float(d[2]), float(d[3]), float(d[4])] for d in days]
+        df = pd.DataFrame(rows, columns=["date", "open", "close", "high", "low"])
+        df.index = pd.to_datetime(df["date"])
+        return df
     except Exception:
         return None
+
+
+def _fetch_quote_live(code: str) -> float:
+    """腾讯 qt 实时现价，失败返回 0。"""
+    prefix = "sh" if code.startswith(("6", "9")) else "sz"
+    url = f"https://qt.gtimg.cn/q={prefix}{code}"
+    try:
+        text = urllib.request.urlopen(url, timeout=8).read().decode("gbk", errors="replace")
+        m = re.search(r'="([^"]*)"', text)
+        if m:
+            parts = m.group(1).split("~")
+            try:
+                return float(parts[3])
+            except (ValueError, IndexError):
+                pass
+    except Exception:
+        pass
+    return 0.0
+
+
+def analyze_sell(code: str, use_live: bool = True) -> dict | None:
+    # 实时优先：腾讯 fqkline 拉最新前复权日线；失败降级本地缓存
+    df = None
+    if use_live:
+        df = _fetch_kline_live(code)
+    if df is None:
+        price_path = os.path.join(CACHE_DIR, f"prices_{code}.csv")
+        if not os.path.exists(price_path):
+            return None
+        try:
+            df = pd.read_csv(price_path, index_col=0, parse_dates=True)
+        except Exception:
+            return None
+    if len(df) < 50:
+        return None
+
+    # 实时价：盘中把现价作为"今日最新K线"追加，指标全部基于实时价计算
+    if use_live:
+        live = _fetch_quote_live(code)
+        if live > 0:
+            last_close = float(df["close"].iloc[-1])
+            if abs(live - last_close) > 0.001:
+                prev_high = float(df["high"].iloc[-1])
+                prev_low = float(df["low"].iloc[-1])
+                row = pd.DataFrame(
+                    {
+                        "open": [live], "close": [live],
+                        "high": [max(live, prev_high)], "low": [min(live, prev_low)],
+                    },
+                    index=[pd.Timestamp(datetime.now().date())],
+                )
+                df = pd.concat([df, row])
 
     close = df["close"]
     cur = float(close.iloc[-1])

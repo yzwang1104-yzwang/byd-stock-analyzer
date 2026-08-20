@@ -4,7 +4,7 @@
     "holdings": [
       {
         "code": "600104",
-        "name": "上汽集团",
+        "name": "涓婃苯闆嗗洟",
         "shares": 100,
         "cost_price": 10.52,
         "cost_total": 1052.0,
@@ -17,7 +17,7 @@
       },
       {
         "code": "600370",
-        "name": "*ST三房",
+        "name": "*ST涓夋埧",
         "shares": 400,
         "cost_price": 2.67,
         "cost_total": 1068.0,
